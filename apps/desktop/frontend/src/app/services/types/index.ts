@@ -1,0 +1,8 @@
+export const STAGE_TYPES = {
+  AUDIO_CONTEXT: Symbol.for("AUDIO_CONTEXT"),
+  EVENT_EMITTER: Symbol.for("EVENT_EMITTER"),
+  ELECTRON_STORE: Symbol.for("ELECTRON_STORE"),
+  BUILT_IN_SKINS_FOLDER: Symbol.for("BUILT_IN_SKINS_FOLDER"),
+  APP_VERSION: Symbol.for("APP_VERSION"),
+  APP_PLATFORM: Symbol.for("APP_PLATFORM"),
+};

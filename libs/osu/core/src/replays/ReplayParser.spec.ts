@@ -1,0 +1,20 @@
+import { OsuAction, ReplayFrame } from "./Replay";
+import { parseReplayFramesFromRaw } from "./ReplayParser";
+
+describe("Parsing rawReplayData (from node-osr)", function () {
+  it("should ignore the first three frames from legacy due to negative", function () {
+    const raw = "0|256|-500|0,-1|256|-500|0,-1171|257.0417|124.7764|1";
+    const actual = parseReplayFramesFromRaw(raw);
+    expect(actual).toStrictEqual([]);
+  });
+  it("should have the first correct frame", function () {
+    const raw = "0|256|-500|0,-1|256|-500|0,-1171|257.0417|124.7764|1,13|256.8854|124.8789|1";
+    const f1: ReplayFrame = {
+      time: -1171 - 1 + 13,
+      position: { x: 256.8854, y: 124.8789 },
+      actions: [OsuAction.leftButton],
+    };
+    const actual = parseReplayFramesFromRaw(raw);
+    expect(actual).toEqual([f1]);
+  });
+});

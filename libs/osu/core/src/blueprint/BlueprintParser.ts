@@ -1,0 +1,652 @@
+import { Blueprint, BlueprintInfo } from "./Blueprint";
+import { clamp, floatEqual, Position, Vec2 } from "@osujs/math";
+import { PathControlPoint } from "../hitobjects/slider/PathControlPoint";
+import { PathType } from "../hitobjects/slider/PathType";
+import { TimeSignatures } from "../beatmap/TimeSignatures";
+import { LegacyEffectFlags } from "../beatmap/LegacyEffectFlag";
+import { ControlPoint } from "../beatmap/ControlPoints/ControlPoint";
+import { TimingControlPoint } from "../beatmap/ControlPoints/TimingControlPoint";
+import { DifficultyControlPoint } from "../beatmap/ControlPoints/DifficultyControlPoint";
+import { EffectControlPoint } from "../beatmap/ControlPoints/EffectControlPoint";
+import { SampleControlPoint } from "../beatmap/ControlPoints/SampleControlPoint";
+import { HitSampleInfo } from "../audio/HitSampleInfo";
+import { LegacySampleBank } from "../audio/LegacySampleBank";
+import { HitCircleSettings, HitObjectSettings, SliderSettings, SpinnerSettings } from "./HitObjectSettings";
+import { BeatmapDifficulty } from "../beatmap/BeatmapDifficulty";
+import { Optional } from "utility-types";
+import { ControlPointInfo } from "../beatmap/ControlPoints/ControlPointInfo";
+
+const SECTION_REGEX = /^\s*\[(.+?)]\s*$/;
+const DEFAULT_LEGACY_TICK_OFFSET = 36;
+
+function stripComments(line: string): string {
+  const index = line.indexOf("//");
+  if (index >= 0) {
+    return line.substr(0, index);
+  } else {
+    return line;
+  }
+}
+
+enum LegacyHitObjectType {
+  Circle = 1,
+  Slider = 1 << 1,
+  NewCombo = 1 << 2,
+  Spinner = 1 << 3,
+  ComboSkip = (1 << 4) | (1 << 5) | (1 << 6),
+  Hold = 1 << 7,
+}
+
+enum LegacyHitSoundType {
+  None = 0,
+  Normal = 1,
+  Whistle = 2,
+  Finish = 4,
+  Clap = 8,
+}
+
+export class LegacyHitSampleInfo extends HitSampleInfo {
+  isLayered: boolean;
+  customSampleBank: number;
+
+  constructor(name: string, bank: string | null = null, volume = 0, customSampleBank = 0, isLayered = false) {
+    super(name, bank, customSampleBank >= 2 ? customSampleBank.toString() : null, volume);
+    this.isLayered = isLayered;
+    this.customSampleBank = customSampleBank;
+  }
+}
+
+function hasFlag(bitmask: number, flag: number): boolean {
+  return (bitmask & flag) !== 0;
+}
+
+function splitKeyVal(line: string, separator = ":"): [string, string] {
+  const split = line.split(separator, 2);
+  return [split[0].trim(), split[1]?.trim() ?? ""];
+}
+
+function convertPathType(value: string): PathType {
+  switch (value[0]) {
+    default:
+    case "C":
+      return PathType.Catmull;
+    case "B":
+      return PathType.Bezier;
+    case "L":
+      return PathType.Linear;
+    case "P":
+      return PathType.PerfectCurve;
+  }
+}
+
+class LegacyDifficultyControlPoint extends DifficultyControlPoint {
+  bpmMultiplier: number;
+
+  constructor(beatLength: number) {
+    super();
+    this.bpmMultiplier = beatLength < 0 ? clamp(-beatLength, 10, 10000) / 100.0 : 1;
+  }
+}
+
+type SampleBankInfo = {
+  fileName: string;
+  normal: string;
+  add: string;
+  volume: number;
+  customSampleBank: number;
+};
+
+function convertPathString(pointString: string, offset: Position): PathControlPoint[] {
+  const pointSplit = pointString.split("|");
+  const controlPoints: PathControlPoint[] = [];
+  let startIndex = 0;
+  let endIndex = 0;
+  let first = true;
+
+  while (++endIndex < pointSplit.length) {
+    if (pointSplit[endIndex].length > 1) continue;
+    const endPoint = endIndex < pointSplit.length - 1 ? pointSplit[endIndex + 1] : null;
+
+    const points = convertPoints(pointSplit.slice(startIndex, endIndex), endPoint, first, offset);
+    controlPoints.push(...points);
+    startIndex = endIndex;
+    first = false;
+  }
+  if (endIndex > startIndex) {
+    controlPoints.push(...convertPoints(pointSplit.slice(startIndex, endIndex), null, first, offset));
+  }
+  return controlPoints;
+}
+
+function readPoint(value: string, startPos: Position, points: PathControlPoint[], index: number): void {
+  const [x, y] = value.split(":").map(parseFloat);
+  const position = Vec2.sub({ x, y }, startPos);
+  points[index] = { offset: position };
+}
+
+function isLinear(p: Position[]): boolean {
+  return floatEqual(0, (p[1].y - p[0].y) * (p[2].x - p[0].x) - (p[1].x - p[0].x) * (p[2].y - p[0].y));
+}
+
+function convertPoints(
+  points: string[],
+  endPoint: string | null,
+  first: boolean,
+  offset: Position,
+): PathControlPoint[] {
+  let type: PathType = convertPathType(points[0]);
+  const readOffset = first ? 1 : 0;
+  const readablePoints = points.length - 1;
+  const endPointLength = endPoint !== null ? 1 : 0;
+
+  const vertices: PathControlPoint[] = new Array(readOffset + readablePoints + endPointLength);
+
+  for (let i = 0; i < readOffset; i++) vertices[i] = { offset: Vec2.Zero };
+  for (let i = 1; i < points.length; i++) readPoint(points[i], offset, vertices, readOffset + i - 1);
+  if (endPoint !== null) readPoint(endPoint, offset, vertices, vertices.length - 1);
+
+  if (type === PathType.PerfectCurve) {
+    if (vertices.length !== 3) type = PathType.Bezier;
+    else if (isLinear(vertices.map((v) => v.offset))) type = PathType.Linear;
+  }
+
+  vertices[0].type = type;
+  let startIndex = 0;
+  let endIndex = 0;
+
+  const result: PathControlPoint[] = [];
+
+  while (++endIndex < vertices.length - endPointLength) {
+    if (!Vec2.equal(vertices[endIndex].offset, vertices[endIndex - 1].offset)) {
+      continue;
+    }
+
+    if (endIndex === vertices.length - endPointLength - 1) {
+      continue;
+    }
+
+    vertices[endIndex - 1].type = type;
+    result.push(...vertices.slice(startIndex, endIndex));
+
+    startIndex = endIndex + 1;
+  }
+  if (endIndex > startIndex) {
+    result.push(...vertices.slice(startIndex, endIndex));
+  }
+  return result;
+}
+
+export function parseOsuHitObjectSetting(line: string): HitCircleSettings | SliderSettings | SpinnerSettings {
+  const split = line.split(",");
+
+  const position = { x: parseFloat(split[0]), y: parseFloat(split[1]) };
+  const offset = 0;
+  const time = parseFloat(split[2]) + offset;
+
+  const _type = parseInt(split[3]);
+  const comboSkip = (_type & LegacyHitObjectType.ComboSkip) >> 4;
+  const newCombo: boolean = hasFlag(_type, LegacyHitObjectType.NewCombo);
+
+  const typeBitmask = _type & ~LegacyHitObjectType.ComboSkip & ~LegacyHitObjectType.NewCombo;
+
+  const soundType: number = parseInt(split[4]);
+  const bankInfo: SampleBankInfo = {
+    add: "",
+    customSampleBank: 0,
+    fileName: "",
+    normal: "",
+    volume: 0,
+  };
+
+  if (hasFlag(typeBitmask, LegacyHitObjectType.Circle)) {
+    return {
+      type: "HIT_CIRCLE",
+      time,
+      position,
+      newCombo,
+      comboSkip,
+    };
+  }
+  if (hasFlag(typeBitmask, LegacyHitObjectType.Slider)) {
+    let length: number | undefined;
+    const slides = parseInt(split[6]);
+    if (slides > 9000) throw new Error("Slides count is way too high");
+
+    const repeatCount = Math.max(0, slides - 1);
+
+    const pathPoints = convertPathString(split[5], position);
+
+    if (split.length > 7) {
+      length = Math.max(0, parseFloat(split[7]));
+      if (length === 0) length = undefined;
+    }
+
+    return {
+      type: "SLIDER",
+      time,
+      position,
+      repeatCount,
+      comboSkip,
+      newCombo,
+      pathPoints,
+      length,
+      legacyLastTickOffset: DEFAULT_LEGACY_TICK_OFFSET,
+      tickDistanceMultiplier: 1,
+    };
+  }
+  if (hasFlag(typeBitmask, LegacyHitObjectType.Spinner)) {
+    const duration = Math.max(0, parseFloat(split[5]) + offset - time);
+    return {
+      type: "SPINNER",
+      comboSkip,
+      newCombo,
+      time,
+      position,
+      duration,
+    };
+  }
+  throw Error("Unknown type");
+}
+
+type BlueprintDifficulty = Optional<BeatmapDifficulty, "approachRate">;
+
+const defaultBlueprintInfo = (): BlueprintInfo => ({
+  audioLeadIn: 0,
+  beatmapVersion: 0,
+  stackLeniency: 0.7,
+  onlineBeatmapId: undefined,
+  metadata: {
+    artist: "",
+    title: "",
+    titleUnicode: "",
+    audioFile: "",
+    artistUnicode: "",
+    source: "",
+    tags: "",
+    previewTime: 0,
+    backgroundFile: "",
+    backgroundOffset: { x: 0, y: 0 },
+  },
+});
+
+const defaultBlueprintDifficulty = (): BlueprintDifficulty => ({
+  circleSize: 5,
+  drainRate: 5,
+  overallDifficulty: 5,
+  sliderMultiplier: 1,
+  sliderTickRate: 1,
+});
+
+class BlueprintParser {
+  static LATEST_VERSION = 14;
+
+  data: string;
+  currentSection: BlueprintSection | null;
+
+  offset: number;
+
+  applyOffsets = true;
+
+  formatVersion: number;
+
+  defaultSampleVolume = 100;
+  blueprintInfo: BlueprintInfo;
+  blueprintDifficulty: BlueprintDifficulty;
+  hitObjectSettings: HitObjectSettings[] = [];
+  controlPointInfo: ControlPointInfo = new ControlPointInfo();
+
+  defaultSampleBank: LegacySampleBank = LegacySampleBank.None;
+
+  readonly sectionsToRead: readonly BlueprintSection[];
+  readonly sectionsFinishedReading: string[];
+
+  constructor(data: string, options: BlueprintParseOptions = defaultOptions) {
+    this.data = data;
+    this.currentSection = null;
+    this.formatVersion = options.formatVersion;
+    this.sectionsToRead = options.sectionsToRead;
+    this.blueprintInfo = defaultBlueprintInfo();
+    this.blueprintDifficulty = defaultBlueprintDifficulty();
+    this.sectionsFinishedReading = [];
+
+    this.offset = this.formatVersion <= 4 ? 24 : 0;
+  }
+
+  isFinishedReading() {
+    return this.sectionsToRead <= this.sectionsFinishedReading;
+  }
+
+  parseLine(line: string): void {
+    const strippedLine = stripComments(line);
+    if (!strippedLine) return;
+    if (!this.currentSection && strippedLine.includes("osu file format v")) {
+      this.blueprintInfo.beatmapVersion = parseInt(strippedLine.split("osu file format v")[1], 10);
+      return;
+    }
+    if (SECTION_REGEX.test(strippedLine)) {
+      if (this.currentSection !== null && this.sectionsToRead.includes(this.currentSection)) {
+        this.sectionsFinishedReading.push(this.currentSection);
+      }
+      this.currentSection = (SECTION_REGEX.exec(strippedLine) as RegExpExecArray)[1] as BlueprintSection;
+      return;
+    }
+
+    if (this.currentSection === null || this.sectionsToRead.indexOf(this.currentSection) === -1) {
+      return;
+    }
+
+    switch (this.currentSection) {
+      case "General":
+        this.handleGeneral(strippedLine);
+        break;
+      case "Metadata":
+        this.handleMetadata(strippedLine);
+        break;
+      case "Difficulty":
+        this.handleDifficulty(strippedLine);
+        break;
+      case "HitObjects":
+        this.handleHitObjects(strippedLine);
+        break;
+      case "TimingPoints":
+        this.handleTimingPoints(strippedLine);
+        break;
+      case "Events":
+        this.handleEvents(strippedLine);
+        break;
+      case "Editor":
+        this.handleEditor(strippedLine);
+        break;
+      case "Colours":
+        break;
+    }
+  }
+
+  handleEvents(line: string) {
+    const [eventType, _startTime, ...eventParams] = line.split(",");
+    switch (eventType) {
+      case "0": {
+        const [filename, xOffset, yOffset] = eventParams;
+        this.blueprintInfo.metadata.backgroundFile = filename.replace(/"/g, "");
+        this.blueprintInfo.metadata.backgroundOffset = {
+          x: parseInt(xOffset ?? "0"),
+          y: parseInt(yOffset ?? "0"),
+        };
+      }
+    }
+  }
+
+  handleGeneral(line: string): void {
+    const [key, value] = splitKeyVal(line);
+    const blueprintInfo = this.blueprintInfo;
+    const metadata = blueprintInfo.metadata;
+    switch (key) {
+      case "AudioFilename":
+        metadata.audioFile = value;
+        break;
+      case "AudioLeadIn":
+        blueprintInfo.audioLeadIn = parseInt(value);
+        break;
+      case "PreviewTime":
+        break;
+      case "Countdown":
+        break;
+      case "SampleSet":
+        this.defaultSampleBank = parseInt(value);
+        break;
+      case "SampleVolume":
+        break;
+      case "StackLeniency":
+        blueprintInfo.stackLeniency = Math.fround(parseFloat(value));
+        break;
+      case "Mode":
+        break;
+      case "LetterboxInBreaks":
+        break;
+      case "SpecialStyle":
+        break;
+      case "WidescreenStoryboard":
+        break;
+      case "EpilepsyWarning":
+        break;
+    }
+  }
+
+  handleEditor(line: string): void {
+    const [key, value] = splitKeyVal(line);
+    switch (key) {
+      case "Bookmarks":
+        break;
+      case "DistanceSpacing":
+        break;
+      case "BeatDivisor":
+        break;
+      case "GridSize":
+        break;
+      case "TimelineZoom":
+        break;
+    }
+  }
+
+  handleMetadata(line: string): void {
+    const [key, value] = splitKeyVal(line);
+    const blueprintInfo = this.blueprintInfo;
+    const metaData = blueprintInfo.metadata;
+    switch (key) {
+      case "Title":
+        metaData.title = value;
+        break;
+      case "TitleUnicode":
+        metaData.titleUnicode = value;
+        break;
+      case "Artist":
+        metaData.artist = value;
+        break;
+      case "ArtistUnicode":
+        metaData.artistUnicode = value;
+        break;
+      case "Creator":
+        break;
+      case "Version":
+        break;
+      case "Source":
+        break;
+      case "Tags":
+        metaData.tags = value;
+        break;
+      case "BeatmapId":
+        break;
+      case "BeatmapSetID":
+        break;
+    }
+  }
+
+  handleDifficulty(line: string): void {
+    const [key, value] = splitKeyVal(line);
+    const difficulty = this.blueprintDifficulty;
+    switch (key) {
+      case "HPDrainRate":
+        difficulty.drainRate = parseFloat(value);
+        break;
+      case "CircleSize":
+        difficulty.circleSize = parseFloat(value);
+        break;
+      case "OverallDifficulty":
+        difficulty.overallDifficulty = parseFloat(value);
+        break;
+      case "ApproachRate":
+        difficulty.approachRate = parseFloat(value);
+        break;
+      case "SliderMultiplier":
+        difficulty.sliderMultiplier = parseFloat(value);
+        break;
+      case "SliderTickRate":
+        difficulty.sliderTickRate = parseFloat(value);
+        break;
+    }
+  }
+
+  handleHitObjects(line: string): void {
+    const obj = parseOsuHitObjectSetting(line);
+    if (obj) {
+      this.hitObjectSettings.push(obj);
+    }
+  }
+
+  handleTimingPoints(line: string): void {
+    const split: string[] = line.split(",");
+
+    const time = this.getOffsetTime(parseFloat(split[0].trim()));
+    const beatLength = parseFloat(split[1].trim());
+    const speedMultiplier = beatLength < 0 ? 100.0 / -beatLength : 1;
+
+    let timeSignature = TimeSignatures.SimpleQuadruple;
+    if (split.length >= 3)
+      timeSignature = split[2][0] === "0" ? TimeSignatures.SimpleQuadruple : (parseInt(split[2]) as TimeSignatures);
+
+    let sampleSet: LegacySampleBank = this.defaultSampleBank;
+    if (split.length >= 4) sampleSet = parseInt(split[3]);
+
+    let customSampleBank = 0;
+    if (split.length >= 5) customSampleBank = parseInt(split[4]);
+
+    let sampleVolume = this.defaultSampleVolume;
+    if (split.length >= 6) sampleVolume = parseInt(split[5]);
+
+    let timingChange = true;
+    if (split.length >= 7) timingChange = split[6][0] === "1";
+
+    let kiaiMode = false;
+    let omitFirstBarSignature = false;
+    if (split.length >= 8) {
+      const effectFlags = parseInt(split[7]);
+      kiaiMode = hasFlag(effectFlags, LegacyEffectFlags.Kiai);
+      omitFirstBarSignature = hasFlag(effectFlags, LegacyEffectFlags.OmitFirstBarLine);
+    }
+
+    let stringSampleSet = LegacySampleBank[sampleSet].toLowerCase();
+    if (stringSampleSet === "none") stringSampleSet = "normal";
+
+    if (timingChange) {
+      const controlPoint = this.createTimingControlPoint();
+      if (Number.isNaN(beatLength)) throw Error("NaN");
+      else controlPoint.beatLength = clamp(beatLength, MIN_BEAT_LENGTH, MAX_BEAT_LENGTH);
+      controlPoint.timeSignature = timeSignature;
+      this.addControlPoint(time, controlPoint, true);
+    }
+
+    {
+      const p = new LegacyDifficultyControlPoint(beatLength);
+      p.speedMultiplier = bindableNumberNew(speedMultiplier, { min: 0.1, max: 10, precision: 0.01 });
+      this.addControlPoint(time, p, timingChange);
+    }
+    {
+      const p = new EffectControlPoint();
+      p.kiaiMode = kiaiMode;
+      p.omitFirstBarLine = omitFirstBarSignature;
+      this.addControlPoint(time, p, timingChange);
+    }
+    {
+      const p = new SampleControlPoint();
+      p.sampleBank = stringSampleSet;
+      p.sampleVolume = sampleVolume;
+      this.addControlPoint(time, p, timingChange);
+    }
+  }
+
+  pendingControlPoints: ControlPoint[] = [];
+  pendingControlPointTypes: { [key: string]: boolean } = {};
+  pendingControlPointsTime = 0;
+
+  createTimingControlPoint(): TimingControlPoint {
+    return new TimingControlPoint();
+  }
+
+  addControlPoint(time: number, point: ControlPoint, timingChange: boolean): void {
+    if (!floatEqual(time, this.pendingControlPointsTime)) {
+      this.flushPendingPoints();
+    }
+    if (timingChange) {
+      this.pendingControlPoints.splice(0, 0, point);
+    } else {
+      this.pendingControlPoints.push(point);
+    }
+    this.pendingControlPointsTime = time;
+  }
+
+  flushPendingPoints(): void {
+    for (let i = this.pendingControlPoints.length - 1; i >= 0; i--) {
+      const type: string = this.pendingControlPoints[i].type;
+      if (this.pendingControlPointTypes[type]) continue;
+      this.pendingControlPointTypes[type] = true;
+      this.controlPointInfo.add(this.pendingControlPointsTime, this.pendingControlPoints[i]);
+    }
+    this.pendingControlPoints = [];
+    this.pendingControlPointTypes = {};
+  }
+
+  getOffsetTime(time: number): number {
+    return time + (this.applyOffsets ? this.offset : 0);
+  }
+
+  parse(): Blueprint {
+    if (!this.data) throw new Error("No data given");
+    const lines = this.data.split("\n").map((v) => v.trim());
+    for (const line of lines) {
+      try {
+        this.parseLine(line);
+      } catch (err) {
+        console.error(`Failed to parse line ${line} due to: `, err);
+      }
+      if (this.isFinishedReading()) {
+        break;
+      }
+    }
+    this.flushPendingPoints();
+    return {
+      blueprintInfo: this.blueprintInfo,
+      defaultDifficulty: {
+        ...this.blueprintDifficulty,
+        approachRate: this.blueprintDifficulty.approachRate ?? this.blueprintDifficulty.overallDifficulty,
+      },
+      hitObjectSettings: this.hitObjectSettings,
+      controlPointInfo: this.controlPointInfo,
+    };
+  }
+}
+
+const MIN_BEAT_LENGTH = 6;
+const MAX_BEAT_LENGTH = 60000;
+const DEFAULT_BEAT_LENGTH = 1000;
+
+function bindableNumberNew(val: number, { min, max, precision }: { min: number; max: number; precision: number }) {
+  return clamp(val, min, max);
+}
+
+export const BlueprintSections = [
+  "General",
+  "Metadata",
+  "Difficulty",
+  "HitObjects",
+  "TimingPoints",
+  "Events",
+  "Editor",
+  "Colours",
+] as const;
+export type BlueprintSection = typeof BlueprintSections[number];
+
+interface BlueprintParseOptions {
+  formatVersion: number;
+  sectionsToRead: readonly BlueprintSection[];
+}
+
+const defaultOptions: BlueprintParseOptions = {
+  formatVersion: BlueprintParser.LATEST_VERSION,
+  sectionsToRead: BlueprintSections,
+};
+
+export function parseBlueprint(data: string, options?: Partial<BlueprintParseOptions>) {
+  const allOptions = Object.assign({ ...defaultOptions }, options);
+  const parser = new BlueprintParser(data, allOptions);
+  return parser.parse();
+}

@@ -1,0 +1,46 @@
+{
+  "appId": "local.osucoach.app",
+  "productName": "osu!coach",
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "generateUpdatesFilesForAllChannels": true,
+  "directories": {
+    "output": "dist/electron",
+    "buildResources": "tools/electron-builder/build-resources",
+    "app": "."
+  },
+  "snap": {
+    "publish": [
+      "github"
+    ]
+  },
+  "files": [
+    {
+      "from": "dist/apps/desktop",
+      "filter": [
+        "index.js",
+        "assets"
+      ]
+    },
+    {
+      "from": "dist/apps/desktop/frontend",
+      "to": "frontend"
+    },
+    {
+      "from": "dist/apps/desktop/backend",
+      "to": "backend"
+    },
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/Skins",
+      "to": "Skins"
+    }
+  ],
+  "asarUnpack": [
+    "node_modules/ffmpeg-static/**"
+  ]
+}

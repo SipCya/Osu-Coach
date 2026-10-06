@@ -1,0 +1,30 @@
+name: Build/release v2
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: nschloe/action-cached-lfs-checkout@v1
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Build/release Electron app
+        uses: Yan-Jobs/action-electron-builder@v1.7.0
+        with:
+          github_token: ${{ secrets.github_token }}
+
+          release: ${{ startsWith(github.ref, 'refs/tags/v') }}

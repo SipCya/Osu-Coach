@@ -1,0 +1,35 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strictNullChecks": true,
+    "importHelpers": true,
+    "target": "es2015",
+    "module": "esnext",
+    "lib": ["es2017", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@osujs/core": ["libs/osu/core/src/index.ts"],
+      "@osujs/math": ["libs/osu/math/src/index.ts"],
+      "@osujs/pp": ["libs/osu/pp/src/index.ts"],
+      "@osucoach/osu-local/db-reader": ["libs/osu-local/db-reader/src/index.ts"],
+      "@osucoach/osu-local/gosumemory": ["libs/osu-local/gosumemory/src/index.ts"],
+      "@osucoach/osu-local/osr-reader": ["libs/osu-local/osr-reader/src/index.ts"],
+      "@osucoach/osu-local/skin-reader": ["libs/osu-local/skin-reader/src/index.ts"],
+      "@osucoach/osu-local/utils": ["libs/osu-local/utils/src/index.ts"],
+      "@osucoach/osu-pixi/classic-components": ["libs/osu-pixi/classic-components/src/index.ts"],
+      "@osucoach/osu-pixi/analysis": ["libs/osu-pixi/analysis/src/index.ts"],
+      "@osucoach/osu/skin": [
+        "libs/osu/skin/src/index.ts"
+      ]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}
