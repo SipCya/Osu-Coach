@@ -16,8 +16,6 @@ import {
   Stack,
   Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -216,12 +214,34 @@ export function SpeedChanger() {
     followedProfile.current = null;
   };
 
-  const switchSpeedMode = (mode: SpeedMode) => {
+  const changeRate = (next: number) => {
     manual();
-    if (mode === "bpm") setTargetBpm(String(Math.round(mainBpm * rate)));
-    else if (bpmRate !== null) setRate(Math.round(bpmRate * 100) / 100);
-    setSpeedMode(mode);
+    setSpeedMode("rate");
+    setRate(next);
+    setTargetBpm(String(Math.round(mainBpm * next)));
   };
+
+  const changeBpm = (text: string) => {
+    manual();
+    setSpeedMode("bpm");
+    setTargetBpm(text);
+    const next = rateForBpm(Number(text), mainBpm);
+    if (next !== null) setRate(next);
+  };
+
+  const speedState = useRef({ speedMode, rate, targetBpm });
+  speedState.current = { speedMode, rate, targetBpm };
+
+  useEffect(() => {
+    if (mainBpm <= 0) return;
+    const state = speedState.current;
+    if (state.speedMode === "rate") {
+      setTargetBpm(String(Math.round(mainBpm * state.rate)));
+    } else {
+      const next = rateForBpm(Number(state.targetBpm), mainBpm);
+      if (next !== null) setRate(next);
+    }
+  }, [mainBpm]);
 
   const currentSpeed: SpeedSetting =
     speedMode === "bpm" ? { mode: "bpm", bpm: Number(targetBpm) } : { mode: "rate", rate };
@@ -230,8 +250,14 @@ export function SpeedChanger() {
 
   const applyProfile = (profile: SpeedProfile) => {
     if (!map) return;
-    if (profile.speed.mode === "rate") setRate(profile.speed.rate);
-    else setTargetBpm(String(profile.speed.bpm));
+    if (profile.speed.mode === "rate") {
+      setRate(profile.speed.rate);
+      setTargetBpm(String(Math.round(mainBpm * profile.speed.rate)));
+    } else {
+      setTargetBpm(String(profile.speed.bpm));
+      const next = rateForBpm(profile.speed.bpm, mainBpm);
+      if (next !== null) setRate(next);
+    }
     setSpeedMode(profile.speed.mode);
     setChangePitch(profile.changePitch);
     setDifficulty(applyProfileDifficulty(profile, map.info.difficulty));
@@ -427,62 +453,52 @@ export function SpeedChanger() {
             <Stack direction={{ xs: "column", md: "row" }} gap={2}>
               <Box sx={{ flex: 1 }}>
                 <Card title={t("sc.speed")}>
-                  <ToggleButtonGroup
-                    exclusive
-                    size={"small"}
-                    value={speedMode}
-                    onChange={(_, mode: SpeedMode | null) => mode && switchSpeedMode(mode)}
-                    sx={{ mb: 2 }}
-                  >
-                    <ToggleButton value={"rate"} sx={{ textTransform: "none", px: 2 }}>
-                      {t("sc.modeRate")}
-                    </ToggleButton>
-                    <ToggleButton value={"bpm"} sx={{ textTransform: "none", px: 2 }}>
-                      {t("sc.modeBpm")}
-                    </ToggleButton>
-                  </ToggleButtonGroup>
                   <Typography variant={"h2"} sx={{ fontWeight: 800, color: ACCENT, lineHeight: 1 }}>
                     {speed === null ? "–" : formatRate(speed)}
                   </Typography>
-                  {speedMode === "rate" ? (
-                    <Slider
-                      value={rate}
-                      min={MIN_RATE}
-                      max={MAX_RATE}
-                      step={0.05}
-                      onChange={(_, v) => {
-                        manual();
-                        setRate(v as number);
-                      }}
-                      marks={[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${v}x` }))}
-                      sx={{ color: ACCENT, mt: 2 }}
-                    />
-                  ) : (
-                    <TextField
-                      type={"number"}
-                      label={t("sc.targetBpm")}
-                      value={targetBpm}
-                      onChange={(e) => {
-                        manual();
-                        setTargetBpm(e.target.value);
-                      }}
-                      error={invalidBpm}
-                      helperText={
-                        invalidBpm
-                          ? t("sc.bpmOutOfRange", { min: range.min, max: range.max })
-                          : t("sc.bpmHint", { main: Number(mainBpm.toFixed(2)) })
-                      }
-                      inputProps={{ min: range.min, max: range.max, step: 1 }}
-                      sx={{ mt: 2, maxWidth: 260 }}
-                    />
-                  )}
+                  <Slider
+                    value={Math.min(MAX_RATE, Math.max(MIN_RATE, rate))}
+                    min={MIN_RATE}
+                    max={MAX_RATE}
+                    step={0.01}
+                    onChange={(_, v) => changeRate(v as number)}
+                    marks={[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((v) => ({ value: v, label: `${v}x` }))}
+                    sx={{ color: ACCENT, mt: 2 }}
+                  />
                   <Stack direction={"row"} gap={4} sx={{ mt: 2 }}>
                     <Box>
                       <Typography variant={"caption"} color={"text.secondary"}>
                         {t("sc.bpm")}
                       </Typography>
-                      <Typography variant={"h6"} sx={{ fontWeight: 700 }}>
-                        {formatBpm(map.info, 1)} → {formatBpm(map.info, effectiveRate)}
+                      <Stack direction={"row"} alignItems={"center"} gap={1}>
+                        <Typography variant={"h6"} sx={{ fontWeight: 700 }}>
+                          {Number(mainBpm.toFixed(2))} →
+                        </Typography>
+                        <TextField
+                          type={"number"}
+                          size={"small"}
+                          value={targetBpm}
+                          onChange={(e) => changeBpm(e.target.value)}
+                          error={invalidBpm}
+                          inputProps={{
+                            min: range.min,
+                            max: range.max,
+                            step: 1,
+                            "aria-label": t("sc.newBpm"),
+                            style: { fontWeight: 700, fontSize: "1.1rem", width: 72 },
+                          }}
+                        />
+                      </Stack>
+                      <Typography
+                        variant={"caption"}
+                        color={invalidBpm ? "error" : "text.secondary"}
+                        sx={{ display: "block", mt: 0.5 }}
+                      >
+                        {invalidBpm
+                          ? t("sc.bpmOutOfRange", { min: range.min, max: range.max })
+                          : map.info.bpm.min !== map.info.bpm.max
+                          ? t("sc.bpmVariable", { range: formatBpm(map.info, effectiveRate) })
+                          : t("sc.newBpm")}
                       </Typography>
                     </Box>
                     <Box>

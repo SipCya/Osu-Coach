@@ -1,4 +1,4 @@
-import { injectable } from "inversify";
+import { inject, injectable } from "inversify";
 import { BehaviorSubject } from "rxjs";
 import { Beatmap, buildBeatmap, modsToBitmask, parseBlueprint } from "@osujs/core";
 import { GameSimulator } from "../common/game/GameSimulator";
@@ -19,6 +19,13 @@ import { BeatmapBackgroundSettingsStore } from "../common/beatmap-background";
 import { TextureManager } from "../textures/TextureManager";
 import { ReplayFileWatcher } from "../common/local/ReplayFileWatcher";
 import { ModSettingsService } from "../analysis/mod-settings";
+import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
+import { buildHitsoundEvents } from "../hitsounds/hitsound-events";
+import { parseHitsoundData } from "../hitsounds/hitsound-data";
+import { SkinSettingsStore } from "../common/skin";
+import { SkinLoader } from "../common/local/SkinLoader";
+import { stringToSkinId } from "../../model/SkinId";
+import { STAGE_TYPES } from "../types";
 
 interface Scenario {
   status: "LOADING" | "ERROR" | "DONE" | "INIT";
@@ -49,8 +56,23 @@ export class ScenarioManager {
     private readonly sceneManager: AnalysisSceneManager,
     private readonly replayWatcher: ReplayFileWatcher,
     private readonly audioEngine: AudioEngine,
+    private readonly hitsoundPlayer: HitsoundPlayer,
+    private readonly skinSettingsStore: SkinSettingsStore,
+    private readonly skinLoader: SkinLoader,
+    @inject(STAGE_TYPES.BUILT_IN_SKINS_FOLDER) private readonly builtInSkinsFolder: string,
   ) {
     this.scenario$ = new BehaviorSubject<Scenario>({ status: "INIT" });
+    this.skinSettingsStore.settings$.subscribe(() => {
+      void this.hitsoundPlayer.changeSkinFolder(this.currentSkinFolder());
+    });
+  }
+
+  private currentSkinFolder(): string | null {
+    try {
+      return this.skinLoader.resolveToPath(stringToSkinId(this.skinSettingsStore.settings.preferredSkinId));
+    } catch {
+      return null;
+    }
   }
 
   public initialize() {
@@ -66,6 +88,7 @@ export class ScenarioManager {
     this.renderer.getRenderer()?.clear();
     this.beatmapManager.setBeatmap(Beatmap.EMPTY_BEATMAP);
     this.gameSimulator.clear();
+    this.hitsoundPlayer.clear();
     this.gameLoop.stopTicker();
     this.scenario$.next({ status: "INIT" });
   }
@@ -117,6 +140,18 @@ export class ScenarioManager {
     this.replayManager.setMainReplay(replay);
 
     await this.gameSimulator.simulateReplay(beatmap, replay);
+    this.hitsoundPlayer.clear();
+    const finalState = this.gameSimulator.getFinalState();
+    if (finalState) {
+      const events = buildHitsoundEvents(beatmap.hitObjects, finalState, parseHitsoundData(rawBlueprint));
+      this.hitsoundPlayer
+        .load(events, {
+          beatmap: absoluteFolderPath,
+          skin: this.currentSkinFolder(),
+          fallback: join(this.builtInSkinsFolder, "OsuDefaultSkin"),
+        })
+        .catch((e) => console.error("Could not load hitsounds", e));
+    }
     await this.sceneManager.changeToScene(AnalysisSceneKeys.ANALYSIS);
 
     this.gameLoop.startTicker();

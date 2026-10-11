@@ -1,3 +1,4 @@
+import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
 import { Container } from "inversify";
 import { AnalysisApp } from "./AnalysisApp";
 import { PixiRendererManager } from "../renderers/PixiRendererManager";
@@ -52,6 +53,7 @@ export function createAnalysisApp(commonContainer: Container) {
 
   container.bind(TextureManager).toSelf();
   container.bind(AudioEngine).toSelf();
+  container.bind(HitsoundPlayer).toSelf();
 
   container.bind(AnalysisSceneManager).toSelf();
   container.bind(SceneManager).toSelf();

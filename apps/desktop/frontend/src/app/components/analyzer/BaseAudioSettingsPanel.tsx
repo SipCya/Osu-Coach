@@ -1,5 +1,5 @@
 import { useTranslation } from "../../i18n";
-import { Box, Slider, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Slider, Stack, Typography } from "@mui/material";
 import { VolumeDown, VolumeUp } from "@mui/icons-material";
 
 type Change = (x: number) => void;
@@ -59,11 +59,7 @@ export function BaseAudioSettingsPanel(props: BaseAudioSettingsPanelProps) {
         <Typography id="input-slider" gutterBottom>
           {t("settings.effectsVolume")}
         </Typography>
-        <Tooltip title={t("settings.hitSoundsSoon")}>
-          <span>
-            <VolumeSlider disabled={true} onChange={onEffectsChange} value={effects} />
-          </span>
-        </Tooltip>
+        <VolumeSlider onChange={onEffectsChange} value={effects} />
       </Box>
     </Stack>
   );

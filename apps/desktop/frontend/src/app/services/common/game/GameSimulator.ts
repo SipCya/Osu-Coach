@@ -117,6 +117,10 @@ export class GameSimulator {
     }
   }
 
+  getFinalState() {
+    return this.lastState;
+  }
+
   getCurrentState() {
     return this.currentState;
   }
