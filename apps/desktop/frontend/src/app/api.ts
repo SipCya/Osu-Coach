@@ -12,6 +12,7 @@ export const frontendAPI = {
   getPath: (type: string) => ipcRenderer.invoke("getPath", type),
   selectDirectory: (defaultPath: string) => ipcRenderer.invoke("selectDirectory", defaultPath),
   selectFile: (defaultPath: string) => ipcRenderer.invoke("selectFile", defaultPath),
+  selectSaveFile: (defaultPath: string): Promise<string | null> => ipcRenderer.invoke("selectSaveFile", defaultPath),
   reboot: () => ipcRenderer.invoke("reboot"),
   getAppVersion: () => ipcRenderer.invoke("getAppVersion"),
   getPlatform: () => ipcRenderer.invoke("getPlatform"),

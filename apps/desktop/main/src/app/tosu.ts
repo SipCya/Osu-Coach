@@ -54,6 +54,25 @@ export async function readTosu(): Promise<TosuSnapshot | null> {
   }
 }
 
+export interface TosuGameplay {
+  playing: boolean;
+  combo: number;
+}
+
+const PLAYING_STATE = 2;
+
+export async function readGameplay(): Promise<TosuGameplay | null> {
+  try {
+    const json = await fetchJson(TOSU_URL, 400);
+    return {
+      playing: json?.menu?.state === PLAYING_STATE,
+      combo: Number(json?.gameplay?.combo?.current) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function setupTosuListeners() {
   ipcMain.handle("tosuSnapshot", () => readTosu());
 }

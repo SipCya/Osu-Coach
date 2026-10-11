@@ -4,7 +4,7 @@ import { LeftMenuSidebar } from "./components/sidebar/LeftMenuSidebar";
 import { SplashScreen } from "./screens/splash/SplashScreen";
 import { HomeScreen } from "./screens/home/HomeScreen";
 import { Box, Divider, Stack, Tab, Tabs } from "@mui/material";
-import { Brush, CleaningServices, CollectionsBookmark, GpsFixed, Speed } from "@mui/icons-material";
+import { Brush, CleaningServices, CollectionsBookmark, FlashlightOn, GpsFixed, Speed } from "@mui/icons-material";
 import { FaMicroscope } from "react-icons/fa";
 import { SpeedChanger } from "./screens/speed-changer/SpeedChanger";
 import { useTranslation } from "./i18n";
@@ -22,6 +22,7 @@ import { CollectionManagerScreen } from "./screens/collections/CollectionManager
 import { MapCleaner } from "./screens/map-cleaner/MapCleaner";
 import { AimTrainer } from "./screens/trainer/AimTrainer";
 import { SkinManager } from "./screens/skins/SkinManager";
+import { FlashlightScreen } from "./screens/flashlight/FlashlightScreen";
 
 function TopMenu() {
   const { t } = useTranslation();
@@ -37,6 +38,8 @@ function TopMenu() {
     ? "trainer"
     : location.pathname.includes("skins")
     ? "skins"
+    : location.pathname.includes("flashlight")
+    ? "flashlight"
     : location.pathname.includes("analyzer")
     ? "analyzer"
     : false;
@@ -101,6 +104,14 @@ function TopMenu() {
         icon={<Brush />}
         iconPosition={"start"}
         label={t("nav.skins")}
+        onFocus={(e: React.FocusEvent<HTMLElement>) => e.currentTarget.blur()}
+        sx={tabSx}
+      />
+      <Tab
+        value={"flashlight"}
+        icon={<FlashlightOn />}
+        iconPosition={"start"}
+        label={t("nav.flashlight")}
         onFocus={(e: React.FocusEvent<HTMLElement>) => e.currentTarget.blur()}
         sx={tabSx}
       />
@@ -178,6 +189,7 @@ export function OsuCoachApp() {
         <Route path={"cleaner"} element={<MapCleaner />} />
         <Route path={"trainer"} element={<AimTrainer />} />
         <Route path={"skins"} element={<SkinManager />} />
+        <Route path={"flashlight"} element={<FlashlightScreen />} />
       </Route>
     </Routes>
   );

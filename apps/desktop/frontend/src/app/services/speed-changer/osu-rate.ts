@@ -317,5 +317,5 @@ export function osuFileName(info: BeatmapInfo, version: string): string {
 export function rateAudioFileName(original: string, rate: number, changePitch: boolean): string {
   const dot = original.lastIndexOf(".");
   const base = dot > 0 ? original.slice(0, dot) : original;
-  return `${base}_${rate.toFixed(2)}x${changePitch ? "_nc" : ""}.mp3`.replace(INVALID_FILE_CHARS, "");
+  return `${base}_${Number(rate.toFixed(4))}x${changePitch ? "_nc" : ""}.mp3`.replace(INVALID_FILE_CHARS, "");
 }

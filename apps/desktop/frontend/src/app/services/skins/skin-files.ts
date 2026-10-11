@@ -34,6 +34,7 @@ export interface LoadedSkin {
   folder: string;
   fonts: SkinFonts;
   ini: string | null;
+  iniFile: string | null;
   groups: Map<SkinGroupId, SkinFile[]>;
   modified: Set<SkinGroupId>;
 }
@@ -107,7 +108,8 @@ export async function loadSkin(osuFolder: string, name: string): Promise<LoadedS
     const group = groupOfPath(entry.path, fonts);
     if (group) modified.add(group);
   }
-  return { name, folder, fonts, ini, groups: classifySkinFiles(files, fonts), modified };
+  const iniFile = root.find((f) => f.toLowerCase() === "skin.ini") ?? null;
+  return { name, folder, fonts, ini, iniFile, groups: classifySkinFiles(files, fonts), modified };
 }
 
 async function exists(path: string) {
@@ -150,14 +152,15 @@ export async function replaceGroup(osuFolder: string, targetName: string, source
   await writeManifest(target.folder, manifest);
 }
 
-export async function restoreGroup(osuFolder: string, skinName: string, group: SkinGroupId) {
+async function restoreMatching(
+  osuFolder: string,
+  skinName: string,
+  match: (path: string, fonts: SkinFonts) => boolean,
+) {
   const skin = await loadSkin(osuFolder, skinName);
   const manifest = await readManifest(skin.folder);
-  for (const file of skin.groups.get(group) ?? []) {
-    if (manifest.files[file.path.toLowerCase()]) await unlink(join(skin.folder, file.path)).catch(() => undefined);
-  }
   for (const [key, entry] of Object.entries(manifest.files)) {
-    if (groupOfPath(entry.path, skin.fonts) !== group) continue;
+    if (!match(entry.path, skin.fonts)) continue;
     if (entry.state === "original") {
       const backup = join(skin.folder, ORIGINALS_FOLDER, entry.path);
       await mkdir(dirname(join(skin.folder, entry.path)), { recursive: true });
@@ -173,6 +176,36 @@ export async function restoreGroup(osuFolder: string, skinName: string, group: S
   } else {
     await writeManifest(skin.folder, manifest);
   }
+}
+
+export async function restoreGroup(osuFolder: string, skinName: string, group: SkinGroupId) {
+  await restoreMatching(osuFolder, skinName, (path, fonts) => groupOfPath(path, fonts) === group);
+}
+
+export async function restoreGroupAndIni(osuFolder: string, skinName: string, group: SkinGroupId) {
+  await restoreMatching(
+    osuFolder,
+    skinName,
+    (path, fonts) => groupOfPath(path, fonts) === group || path.toLowerCase() === "skin.ini",
+  );
+}
+
+export async function applySkinChanges(
+  skin: LoadedSkin,
+  writes: { path: string; data: Buffer | string }[],
+  removals: string[],
+) {
+  const manifest = await readManifest(skin.folder);
+  for (const path of removals) {
+    await protect(skin.folder, manifest, path);
+    await unlink(join(skin.folder, path)).catch(() => undefined);
+  }
+  for (const { path, data } of writes) {
+    await protect(skin.folder, manifest, path);
+    await mkdir(dirname(join(skin.folder, path)), { recursive: true });
+    await writeFile(join(skin.folder, path), data);
+  }
+  await writeManifest(skin.folder, manifest);
 }
 
 export async function readSkinFile(skin: LoadedSkin, path: string): Promise<Buffer> {

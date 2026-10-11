@@ -180,6 +180,7 @@ export const en = {
   "nav.cleaner": "Cleaner",
   "nav.trainer": "Aim Trainer",
   "nav.skins": "Skins",
+  "nav.flashlight": "Flashlight",
 
   "sc.followGame": "Follow the map selected in osu!",
   "sc.tosuConnected": "Connected to tosu",
@@ -207,6 +208,20 @@ export const en = {
   "sc.error": "Error: {error}",
   "sc.noObjects": "This difficulty has no objects: choose another one.",
   "sc.sameAsOriginal": "The new map would overwrite the original: change the speed or the name.",
+  "sc.modeRate": "Multiplier",
+  "sc.modeBpm": "Exact BPM",
+  "sc.targetBpm": "Target BPM",
+  "sc.bpmHint": "Refers to the main BPM of the map ({main})",
+  "sc.bpmOutOfRange": "For this map choose between {min} and {max} BPM",
+  "sc.profiles": "Profiles",
+  "sc.profilesEmpty": "No saved profiles yet. Set speed and difficulty, then save them to reuse on other maps.",
+  "sc.saveProfile": "Save as profile",
+  "sc.profileName": "Profile name",
+  "sc.profileOverwrite": "A profile with this name exists: it will be replaced.",
+  "sc.profileHint":
+    "A profile keeps speed or BPM, pitch, and only the difficulty values you changed. Click it to apply it; if you change map in osu! it is applied again.",
+  "sc.deleteProfileTitle": "Delete the profile?",
+  "sc.deleteProfileText": 'The profile "{name}" will be deleted. Maps already created do not change.',
   "col.title": "Collections",
   "col.new": "New collection",
   "col.empty": "No collections yet. Create one to start organizing your maps.",
@@ -503,6 +518,55 @@ export const en = {
   "sk.newNameHint": "This is the name you will see in the osu! skin list.",
   "sk.create": "Create skin",
   "sk.randomCreated": 'Created the skin "{name}". Select it in osu! to try it.',
+
+  "fl.lookTitle": "Flashlight",
+  "fl.lookIntro":
+    "Practice for the Flashlight mod without using it: only a circle around the cursor stays visible, so you learn to read and memorize maps in the dark. These settings are used by both the overlay and the FL cursor.",
+  "fl.size": "Circle size (of the screen height)",
+  "fl.darkness": "Darkness",
+  "fl.softness": "Soft edge",
+  "fl.overlayTitle": "Overlay over osu!",
+  "fl.overlayIntro":
+    "A transparent layer on top of osu!: it darkens the screen except around the cursor. Clicks go through it, so you play normally.",
+  "fl.display": "Screen",
+  "fl.displayItem": "Screen {n} ({width}x{height})",
+  "fl.primary": "primary",
+  "fl.comboShrink": "Shrink at 100 and 200 combo like the real Flashlight ({first}% and {second}%)",
+  "fl.onlyWhilePlaying": "Darken only while playing a map",
+  "fl.needsTosu":
+    'With tosu open, the game state and combo are read from tosu. Without tosu, "only while playing" reads the title of the osu! window, and shrinking with combo is not available.',
+  "fl.source.tosu": "Reading the game from tosu.",
+  "fl.source.window": "tosu not found: reading the game from the osu! window title. Shrinking with combo needs tosu.",
+  "fl.source.none": "osu! is not running: the overlay waits for the game.",
+  "fl.start": "Start overlay",
+  "fl.stop": "Stop overlay",
+  "fl.statusActive": "active",
+  "fl.statusHidden": "hidden",
+  "fl.hotkey": "Ctrl+Shift+F hides or shows it while you play",
+  "fl.overlayLimits":
+    "Set osu! to borderless or windowed: nothing can be drawn over exclusive fullscreen. The circle follows the Windows cursor: perfect with a tablet in absolute mode; with a mouse it matches only if osu! sensitivity is 1.0 (or raw input is off).",
+  "fl.overlayFallback":
+    "If the overlay gives you problems or you want to play in fullscreen, use the FL cursor below instead: it works in any mode.",
+  "fl.cursorTitle": "FL cursor",
+  "fl.cursorIntro":
+    "Creates a big cursor image with the darkness around your cursor, so you can practice Flashlight directly in osu!, even in exclusive fullscreen and without the overlay.",
+  "fl.skin": "Skin",
+  "fl.inUse": "in use in osu!",
+  "fl.useCurrent": "Use the skin in use",
+  "fl.currentUnknown": "Could not read which skin osu! is using: choose it here.",
+  "fl.generate": "Generate FL cursor of the current skin",
+  "fl.saveAs": "Save as file…",
+  "fl.restore": "Restore original cursor",
+  "fl.applyTitle": "Apply the FL cursor?",
+  "fl.applyText":
+    'The cursor of "{skin}" becomes the FL cursor: cursor.png is replaced, cursor@2x.png is set aside and skin.ini gets CursorExpand: 0 and CursorCentre: 1. The originals are kept and you can restore them anytime.',
+  "fl.applied": 'FL cursor applied to "{skin}". In osu! reload the skin (Ctrl+Alt+Shift+S).',
+  "fl.restoreTitle": "Restore the original cursor?",
+  "fl.restoreText": 'The cursor and skin.ini of "{skin}" go back to how they were.',
+  "fl.restored": 'Original cursor of "{skin}" restored. In osu! reload the skin (Ctrl+Alt+Shift+S).',
+  "fl.savedFile": "Saved {path}.",
+  "fl.cursorNotes":
+    "In osu! keep cursor size at 1.0, otherwise the circle grows or shrinks with it. A cursor image cannot follow the combo, so it does not shrink at 100 and 200.",
 };
 
 export type TranslationKey = keyof typeof en;

@@ -21,6 +21,14 @@ async function userSelectFile(defaultPath: string) {
   }
 }
 
+async function userSelectSaveFile(defaultPath: string) {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    defaultPath,
+    filters: [{ name: "PNG", extensions: ["png"] }],
+  });
+  return canceled || !filePath ? null : filePath;
+}
+
 function appResourcesPath() {
   if (app.isPackaged) return process.resourcesPath;
   const projectResources = join(process.cwd(), "resources");
@@ -45,6 +53,7 @@ export function setupEventListeners() {
   ipcMain.handle("getPath", (event, type) => getPath(type));
   ipcMain.handle("selectDirectory", (event, defaultPath) => userSelectDirectory(defaultPath));
   ipcMain.handle("selectFile", (event, defaultPath) => userSelectFile(defaultPath));
+  ipcMain.handle("selectSaveFile", (event, defaultPath) => userSelectSaveFile(defaultPath));
   ipcMain.handle("getPlatform", () => process.platform);
   ipcMain.handle("getAppVersion", () => app.getVersion());
   ipcMain.handle("reboot", () => {

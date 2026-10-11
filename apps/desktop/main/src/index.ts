@@ -4,26 +4,15 @@ import { setupEventListeners } from "./app/events";
 import { setupSpeedAudioListeners } from "./app/speed-audio";
 import { setupTosuListeners } from "./app/tosu";
 import { windows } from "./app/windows";
-import { join } from "path";
-import { format } from "url";
-import { environment } from "./environments/environment";
 import log from "electron-log";
-
-const { ELECTRON_IS_DEV } = process.env;
-
-function isDevelopmentMode() {
-  if (ELECTRON_IS_DEV) return true;
-  return !environment.production;
-}
+import { join } from "path";
+import { frontendUrl, isDevelopmentMode } from "./app/frontend-url";
+import { closeFlashlightOverlay, setupFlashlightListeners } from "./app/flashlight";
 
 const DEFAULT_WIDTH = 1600;
 const DEFAULT_HEIGHT = 900;
 const MIN_WIDTH = 1024;
 const MIN_HEIGHT = 600;
-
-const rendererAppDevPort = 4200;
-
-const desktopFrontendFile = (fileName: string) => join(__dirname, "frontend", fileName);
 
 function createFrontendWindow() {
   const workAreaSize = screen.getPrimaryDisplay().workAreaSize;
@@ -52,6 +41,7 @@ function createFrontendWindow() {
   });
   frontend.on("closed", () => {
     windows.frontend = null;
+    closeFlashlightOverlay();
     app.quit();
   });
   frontend.webContents.setWindowOpenHandler((details) => {
@@ -68,17 +58,7 @@ function createFrontendWindow() {
     Menu.setApplicationMenu(createMenu(menuState.osuFolder));
   });
 
-  if (isDev) {
-    void frontend.loadURL(`http://localhost:${rendererAppDevPort}`);
-  } else {
-    void frontend.loadURL(
-      format({
-        pathname: desktopFrontendFile("index.html"),
-        protocol: "file:",
-        slashes: true,
-      }),
-    );
-  }
+  void frontend.loadURL(frontendUrl());
 
   windows.frontend = frontend;
 }
@@ -126,6 +106,7 @@ function handleActivate() {
   setupEventListeners();
   setupSpeedAudioListeners();
   setupTosuListeners();
+  setupFlashlightListeners();
 
   app.on("window-all-closed", handleAllWindowClosed);
   app.on("ready", handleReady);

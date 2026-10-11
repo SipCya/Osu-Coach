@@ -183,6 +183,7 @@ export const it: Record<TranslationKey, string> = {
   "nav.cleaner": "Cleaner",
   "nav.trainer": "Aim Trainer",
   "nav.skins": "Skin",
+  "nav.flashlight": "Flashlight",
 
   "sc.followGame": "Segui la mappa selezionata in osu!",
   "sc.tosuConnected": "Collegato a tosu",
@@ -210,6 +211,20 @@ export const it: Record<TranslationKey, string> = {
   "sc.error": "Errore: {error}",
   "sc.noObjects": "Questa difficoltà non ha oggetti: scegline un'altra.",
   "sc.sameAsOriginal": "La nuova mappa sovrascriverebbe l'originale: cambia la velocità o il nome.",
+  "sc.modeRate": "Moltiplicatore",
+  "sc.modeBpm": "BPM esatti",
+  "sc.targetBpm": "BPM desiderati",
+  "sc.bpmHint": "Si riferisce al BPM principale della mappa ({main})",
+  "sc.bpmOutOfRange": "Per questa mappa scegli tra {min} e {max} BPM",
+  "sc.profiles": "Profili",
+  "sc.profilesEmpty": "Nessun profilo salvato. Imposta velocità e difficoltà, poi salvale per riusarle su altre mappe.",
+  "sc.saveProfile": "Salva come profilo",
+  "sc.profileName": "Nome del profilo",
+  "sc.profileOverwrite": "Esiste già un profilo con questo nome: verrà sostituito.",
+  "sc.profileHint":
+    "Un profilo tiene velocità o BPM, pitch e solo i valori di difficoltà che hai cambiato. Cliccalo per applicarlo; se cambi mappa in osu! viene applicato di nuovo.",
+  "sc.deleteProfileTitle": "Eliminare il profilo?",
+  "sc.deleteProfileText": 'Il profilo "{name}" verrà eliminato. Le mappe già create non cambiano.',
   "col.title": "Collezioni",
   "col.new": "Nuova collezione",
   "col.empty": "Ancora nessuna collezione. Creane una per iniziare a organizzare le tue mappe.",
@@ -506,4 +521,54 @@ export const it: Record<TranslationKey, string> = {
   "sk.newNameHint": "È il nome che vedrai nella lista delle skin di osu!.",
   "sk.create": "Crea skin",
   "sk.randomCreated": 'Creata la skin "{name}". Selezionala in osu! per provarla.',
+
+  "fl.lookTitle": "Flashlight",
+  "fl.lookIntro":
+    "Allenati per la mod Flashlight senza usarla: resta visibile solo un cerchio attorno al cursore, così impari a leggere e memorizzare le mappe al buio. Queste impostazioni valgono sia per l'overlay sia per il cursore FL.",
+  "fl.size": "Dimensione del cerchio (rispetto all'altezza dello schermo)",
+  "fl.darkness": "Buio",
+  "fl.softness": "Bordo morbido",
+  "fl.overlayTitle": "Overlay sopra osu!",
+  "fl.overlayIntro":
+    "Uno strato trasparente sopra osu!: oscura lo schermo tranne attorno al cursore. I click lo attraversano, quindi giochi normalmente.",
+  "fl.display": "Schermo",
+  "fl.displayItem": "Schermo {n} ({width}x{height})",
+  "fl.primary": "principale",
+  "fl.comboShrink": "Restringi a 100 e 200 di combo come il vero Flashlight ({first}% e {second}%)",
+  "fl.onlyWhilePlaying": "Oscura solo mentre giochi una mappa",
+  "fl.needsTosu":
+    'Con tosu aperto, stato del gioco e combo vengono letti da tosu. Senza tosu, "solo mentre giochi" legge il titolo della finestra di osu!, e la riduzione con la combo non è disponibile.',
+  "fl.source.tosu": "Gioco letto da tosu.",
+  "fl.source.window":
+    "tosu non trovato: gioco letto dal titolo della finestra di osu!. La riduzione con la combo richiede tosu.",
+  "fl.source.none": "osu! non è aperto: l'overlay aspetta il gioco.",
+  "fl.start": "Avvia overlay",
+  "fl.stop": "Ferma overlay",
+  "fl.statusActive": "attivo",
+  "fl.statusHidden": "nascosto",
+  "fl.hotkey": "Ctrl+Shift+F lo nasconde o lo mostra mentre giochi",
+  "fl.overlayLimits":
+    "Metti osu! in finestra senza bordi o in finestra: sopra lo schermo intero esclusivo non si può disegnare niente. Il cerchio segue il cursore di Windows: perfetto con la tavoletta in modalità assoluta; con il mouse coincide solo se in osu! la sensibilità è 1.0 (o il raw input è spento).",
+  "fl.overlayFallback":
+    "Se l'overlay ti dà problemi o vuoi giocare a schermo intero, usa invece il cursore FL qui sotto: funziona in qualsiasi modalità.",
+  "fl.cursorTitle": "Cursore FL",
+  "fl.cursorIntro":
+    "Crea un'immagine del cursore grande, con il buio attorno al tuo cursore, così puoi allenarti con il Flashlight direttamente in osu!, anche a schermo intero esclusivo e senza overlay.",
+  "fl.skin": "Skin",
+  "fl.inUse": "in uso in osu!",
+  "fl.useCurrent": "Usa la skin in uso",
+  "fl.currentUnknown": "Non sono riuscito a leggere quale skin usa osu!: sceglila qui.",
+  "fl.generate": "Genera cursore FL della skin attuale",
+  "fl.saveAs": "Salva come file…",
+  "fl.restore": "Ripristina cursore originale",
+  "fl.applyTitle": "Applicare il cursore FL?",
+  "fl.applyText":
+    'Il cursore di "{skin}" diventa il cursore FL: cursor.png viene sostituito, cursor@2x.png viene messo da parte e in skin.ini vengono impostati CursorExpand: 0 e CursorCentre: 1. Gli originali restano da parte e puoi ripristinarli quando vuoi.',
+  "fl.applied": 'Cursore FL applicato a "{skin}". In osu! ricarica la skin (Ctrl+Alt+Shift+S).',
+  "fl.restoreTitle": "Ripristinare il cursore originale?",
+  "fl.restoreText": 'Il cursore e lo skin.ini di "{skin}" tornano com\'erano.',
+  "fl.restored": 'Cursore originale di "{skin}" ripristinato. In osu! ricarica la skin (Ctrl+Alt+Shift+S).',
+  "fl.savedFile": "Salvato {path}.",
+  "fl.cursorNotes":
+    "In osu! tieni la dimensione del cursore a 1.0, altrimenti il cerchio si ingrandisce o rimpicciolisce con lei. Un'immagine del cursore non può seguire la combo, quindi non si restringe a 100 e 200.",
 };
