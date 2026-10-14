@@ -28,9 +28,10 @@ function EmptyState() {
   );
 }
 
-const WHEEL_STEP_MS = 100;
+const FRAME_MS = 16;
+const WHEEL_STEP_MS = FRAME_MS * 5; // ~5 frames per wheel notch
 const WHEEL_STEP_SHIFT_MS = 1000;
-const WHEEL_STEP_CTRL_MS = 16;
+const WHEEL_STEP_CTRL_MS = FRAME_MS; // one frame
 
 export const GameCanvas = () => {
   const { t } = useTranslation();

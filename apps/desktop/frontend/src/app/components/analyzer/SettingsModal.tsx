@@ -32,6 +32,7 @@ import { DEFAULT_BEATMAP_RENDER_SETTINGS } from "../../services/common/beatmap-r
 import { DEFAULT_SKIN_SETTINGS } from "../../services/common/skin";
 import { DEFAULT_REPLAY_CURSOR_SETTINGS } from "../../services/common/replay-cursor";
 import { DEFAULT_ANALYSIS_CURSOR_SETTINGS } from "../../services/analysis/analysis-cursor";
+import { DEFAULT_HUD_OVERLAY_SETTINGS } from "../../services/common/hud-overlay";
 import { frontendAPI } from "../../api";
 
 const sourceNameKey: Record<SkinSource, TranslationKey> = {
@@ -222,11 +223,32 @@ function PlaybarAndAdvancedSettings() {
   );
 }
 
+function OverlaySettings() {
+  const { t } = useTranslation();
+  const { hudOverlaySettingsStore } = useCommonManagers();
+  const overlay = useObservable(() => hudOverlaySettingsStore.settings$, DEFAULT_HUD_OVERLAY_SETTINGS);
+
+  return (
+    <Section title={t("settings.sectionOverlays")}>
+      <Row label={t("settings.overlayKeys")}>
+        <Switch checked={overlay.showKeys} onChange={(e) => hudOverlaySettingsStore.setShowKeys(e.target.checked)} />
+      </Row>
+      <Row label={t("settings.overlayUr")}>
+        <Switch checked={overlay.showUr} onChange={(e) => hudOverlaySettingsStore.setShowUr(e.target.checked)} />
+      </Row>
+      <Row label={t("settings.overlayPp")} description={t("settings.overlayPpHint")}>
+        <Switch checked={overlay.showPp} onChange={(e) => hudOverlaySettingsStore.setShowPp(e.target.checked)} />
+      </Row>
+    </Section>
+  );
+}
+
 function GameplaySettings() {
   return (
     <Stack gap={3}>
       <CursorSettings />
       <PlayfieldSettings />
+      <OverlaySettings />
       <PlaybarAndAdvancedSettings />
     </Stack>
   );

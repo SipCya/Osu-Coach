@@ -10,6 +10,8 @@ export interface HitsoundFolders {
   beatmap: string;
   skin: string | null;
   fallback: string;
+  /** When true, a beatmap's custom hitsounds win over the skin (osu! default). When false, the skin is used. */
+  useBeatmapHitsounds: boolean;
 }
 
 interface PlayableSound {
@@ -96,10 +98,11 @@ export class HitsoundPlayer {
     for (const event of events) {
       const sounds: PlayableSound[] = [];
       for (const sample of event.samples) {
-        const path =
-          findFile(beatmap, sample.beatmapFile) ??
-          findFile(skin, sample.skinFile) ??
-          findFile(fallback, sample.skinFile);
+        const path = folders.useBeatmapHitsounds
+          ? findFile(beatmap, sample.beatmapFile) ??
+            findFile(skin, sample.skinFile) ??
+            findFile(fallback, sample.skinFile)
+          : findFile(skin, sample.skinFile) ?? findFile(fallback, sample.skinFile);
         if (!path) continue;
         const buffer = await this.decode(path);
         if (buffer) sounds.push({ buffer, volume: sample.volume });
@@ -114,6 +117,58 @@ export class HitsoundPlayer {
   async changeSkinFolder(skin: string | null) {
     if (!this.lastFolders || this.lastFolders.skin === skin) return;
     await this.load(this.lastEvents, { ...this.lastFolders, skin });
+  }
+
+  /**
+   * Renders song + hitsounds into a single offline-mixed AudioBuffer for video export.
+   * Reuses the already-decoded sample buffers and the live music/effects levels.
+   */
+  async renderMixdown(songPath: string, durationMs: number, startMs = 0): Promise<AudioBuffer | null> {
+    let songBuffer: AudioBuffer | null = null;
+    try {
+      const data = await readFile(songPath);
+      const copy = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      songBuffer = await this.audioContext.decodeAudioData(copy);
+    } catch {
+      songBuffer = null;
+    }
+
+    const startSec = Math.max(0, startMs / 1000);
+    const sampleRate = this.audioContext.sampleRate;
+    const length = Math.max(1, Math.ceil(((durationMs - startMs) / 1000) * sampleRate));
+    const offline = new OfflineAudioContext(2, length, sampleRate);
+
+    const musicLevel = this.audioEngine.musicGain.gain.value;
+    const sampleLevel = this.audioEngine.samplesGain.gain.value;
+
+    if (songBuffer) {
+      const source = offline.createBufferSource();
+      source.buffer = songBuffer;
+      const gain = offline.createGain();
+      gain.gain.value = musicLevel;
+      source.connect(gain).connect(offline.destination);
+      source.start(0, startSec);
+    }
+
+    for (const event of this.events) {
+      const at = event.time / 1000 - startSec;
+      if (at < 0) continue;
+      for (const sound of event.sounds) {
+        const source = offline.createBufferSource();
+        source.buffer = sound.buffer;
+        const gain = offline.createGain();
+        gain.gain.value = sampleLevel * sound.volume;
+        source.connect(gain).connect(offline.destination);
+        source.start(at);
+      }
+    }
+
+    return offline.startRendering();
+  }
+
+  async setUseBeatmapHitsounds(useBeatmapHitsounds: boolean) {
+    if (!this.lastFolders || this.lastFolders.useBeatmapHitsounds === useBeatmapHitsounds) return;
+    await this.load(this.lastEvents, { ...this.lastFolders, useBeatmapHitsounds });
   }
 
   clear() {

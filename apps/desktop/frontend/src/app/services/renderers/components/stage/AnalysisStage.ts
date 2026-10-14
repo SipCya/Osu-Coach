@@ -8,6 +8,7 @@ import { PixiRendererManager } from "../../PixiRendererManager";
 import { BeatmapBackgroundFactory } from "../background/BeatmapBackground";
 import { STAGE_HEIGHT, STAGE_WIDTH } from "../../constants";
 import { KeyPressWithNoteSheetPreparer } from "../keypresses/KeyPressOverlay";
+import { HudOverlaySettingsStore } from "../../../common/hud-overlay";
 
 const ratio = STAGE_WIDTH / STAGE_HEIGHT;
 const showNoteKeyOverlay = true;
@@ -26,6 +27,7 @@ export class AnalysisStage {
     private playfieldFactory: PlayfieldFactory,
     private foregroundHUDPreparer: ForegroundHUDPreparer,
     private keyPressOverlayPreparer: KeyPressWithNoteSheetPreparer,
+    private hudOverlaySettingsStore: HudOverlaySettingsStore,
   ) {
     const width = STAGE_WIDTH;
     const height = STAGE_HEIGHT;
@@ -91,6 +93,12 @@ export class AnalysisStage {
     this.playfield.updatePlayfield();
     this.foregroundHUDPreparer.updateHUD();
     this.keyPressOverlayPreparer.update();
+    this.keyPressOverlayPreparer.container.visible = this.hudOverlaySettingsStore.settings.showKeys;
+  }
+
+  /** Clean look hides the debug stats text for a plain osu!-like video (UR/PP/keys follow their own toggles). */
+  setCleanLook(clean: boolean) {
+    this.foregroundHUDPreparer.showStats = !clean;
   }
 
   destroy(): void {}

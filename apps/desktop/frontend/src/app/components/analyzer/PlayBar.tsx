@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Divider,
+  FormControlLabel,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -11,6 +12,7 @@ import {
   MenuList,
   Popover,
   Stack,
+  Switch,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -30,6 +32,8 @@ import { useObservable } from "rxjs-hooks";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import { HelpModalDialog } from "./HelpModal";
 import { BaseCurrentTime, GameCurrentTimeHandle } from "./BaseCurrentTime";
+import { ExportVideoButton } from "./ExportVideoDialog";
+import { CheatCheckButton } from "./CheatCheckDialog";
 import { ignoreFocus } from "../../utils/focus";
 import { useAnalysisApp, useCommonManagers } from "../../providers/TheaterProvider";
 import { DEFAULT_PLAY_BAR_SETTINGS } from "../../services/common/playbar";
@@ -121,12 +125,12 @@ function AudioButton() {
   const handleClose = () => {
     setAnchorEl(null);
   };
+  const { t } = useTranslation();
   const { volume, muted } = useAudioSettings();
   const service = useAudioSettingsService();
+  const { hitsoundSettingsStore } = useCommonManagers();
+  const hitsound = useObservable(() => hitsoundSettingsStore.settings$, hitsoundSettingsStore.settings);
 
-  const handleClick = () => {
-    service.toggleMuted();
-  };
   return (
     <>
       <IconButton onClick={handlePopOverOpen}>{muted ? <VolumeOff /> : <VolumeUp />}</IconButton>
@@ -147,12 +151,24 @@ function AudioButton() {
           <BaseAudioSettingsPanel
             master={volume.master}
             music={volume.music}
-            effects={0}
+            effects={volume.effects}
             onMutedChange={(x) => service.setMuted(x)}
             onMasterChange={(x) => service.setMasterVolume(x)}
             onMusicChange={(x) => service.setMusicVolume(x)}
             onEffectsChange={(x) => service.setEffectsVolume(x)}
           />
+          <Box sx={{ px: 2, pb: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  size={"small"}
+                  checked={hitsound.useBeatmapHitsounds}
+                  onChange={(e) => hitsoundSettingsStore.setUseBeatmapHitsounds(e.target.checked)}
+                />
+              }
+              label={t("playbar.useBeatmapHitsounds")}
+            />
+          </Box>
         </Box>
       </Popover>
     </>
@@ -412,6 +428,8 @@ export function PlayBar() {
         <AudioButton />
         <SpeedButton />
         <HiddenButton />
+        <ExportVideoButton />
+        <CheatCheckButton />
         <MoreMenu />
       </Stack>
     </Stack>

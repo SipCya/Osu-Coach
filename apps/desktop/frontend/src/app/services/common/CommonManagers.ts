@@ -10,6 +10,8 @@ import { AnalysisCursorSettingsStore } from "../analysis/analysis-cursor";
 import { ReplayCursorSettingsStore } from "./replay-cursor";
 import { SkinHolder, SkinManager, SkinSettingsStore } from "./skin";
 import { HitErrorBarSettingsStore } from "./hit-error-bar";
+import { HitsoundSettingsStore } from "./hitsound";
+import { HudOverlaySettingsStore } from "./hud-overlay";
 import { PlaybarSettingsStore } from "./playbar";
 import { OsuFolderService } from "./local/OsuFolderService";
 import { OsuDBDao } from "./local/OsuDBDao";
@@ -30,6 +32,8 @@ export class CommonManagers {
     public readonly analysisCursorSettingsStore: AnalysisCursorSettingsStore,
     public readonly replayCursorSettingsStore: ReplayCursorSettingsStore,
     public readonly playbarSettingsStore: PlaybarSettingsStore,
+    public readonly hitsoundSettingsStore: HitsoundSettingsStore,
+    public readonly hudOverlaySettingsStore: HudOverlaySettingsStore,
     public readonly appInfoService: AppInfoService,
   ) {}
 
@@ -69,6 +73,8 @@ export function createAppTheater({ builtInSkinsFolder, appPlatform, appVersion }
   container.bind(ReplayCursorSettingsStore).toSelf();
   container.bind(SkinSettingsStore).toSelf();
   container.bind(PlaybarSettingsStore).toSelf();
+  container.bind(HitsoundSettingsStore).toSelf();
+  container.bind(HudOverlaySettingsStore).toSelf();
 
   container.bind(CommonManagers).toSelf();
 

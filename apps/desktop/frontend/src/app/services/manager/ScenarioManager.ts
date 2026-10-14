@@ -1,6 +1,7 @@
 import { inject, injectable } from "inversify";
 import { BehaviorSubject } from "rxjs";
 import { Beatmap, buildBeatmap, modsToBitmask, parseBlueprint } from "@osujs/core";
+import { Texture } from "pixi.js";
 import { GameSimulator } from "../common/game/GameSimulator";
 import { AudioService } from "../common/audio/AudioService";
 import { ReplayService } from "../common/local/ReplayService";
@@ -11,7 +12,7 @@ import { AudioEngine } from "../common/audio/AudioEngine";
 import { GameplayClock } from "../common/game/GameplayClock";
 import { GameLoop } from "../common/game/GameLoop";
 import { PixiRendererManager } from "../renderers/PixiRendererManager";
-import { join } from "path";
+import { dirname, join } from "path";
 import { readFile } from "fs/promises";
 import { BlueprintLocatorService } from "../common/local/BlueprintLocatorService";
 import { OsuFolderService } from "../common/local/OsuFolderService";
@@ -23,6 +24,7 @@ import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
 import { buildHitsoundEvents } from "../hitsounds/hitsound-events";
 import { parseHitsoundData } from "../hitsounds/hitsound-data";
 import { SkinSettingsStore } from "../common/skin";
+import { HitsoundSettingsStore } from "../common/hitsound";
 import { SkinLoader } from "../common/local/SkinLoader";
 import { stringToSkinId } from "../../model/SkinId";
 import { STAGE_TYPES } from "../types";
@@ -59,11 +61,15 @@ export class ScenarioManager {
     private readonly hitsoundPlayer: HitsoundPlayer,
     private readonly skinSettingsStore: SkinSettingsStore,
     private readonly skinLoader: SkinLoader,
+    private readonly hitsoundSettingsStore: HitsoundSettingsStore,
     @inject(STAGE_TYPES.BUILT_IN_SKINS_FOLDER) private readonly builtInSkinsFolder: string,
   ) {
     this.scenario$ = new BehaviorSubject<Scenario>({ status: "INIT" });
     this.skinSettingsStore.settings$.subscribe(() => {
       void this.hitsoundPlayer.changeSkinFolder(this.currentSkinFolder());
+    });
+    this.hitsoundSettingsStore.settings$.subscribe((s) => {
+      void this.hitsoundPlayer.setUseBeatmapHitsounds(s.useBeatmapHitsounds);
     });
   }
 
@@ -149,6 +155,7 @@ export class ScenarioManager {
           beatmap: absoluteFolderPath,
           skin: this.currentSkinFolder(),
           fallback: join(this.builtInSkinsFolder, "OsuDefaultSkin"),
+          useBeatmapHitsounds: this.hitsoundSettingsStore.settings.useBeatmapHitsounds,
         })
         .catch((e) => console.error("Could not load hitsounds", e));
     }
@@ -164,6 +171,51 @@ export class ScenarioManager {
     this.modSettingsService.setHidden(false);
     this.modSettingsService.setHiddenAvailable(false);
     this.replayManager.setMainReplay(null);
+  }
+
+  /**
+   * Renders a beatmap on its own (no replay) from a raw .osu file, like an editor preview:
+   * notes and approach circles are drawn and the song plays in sync with the game clock.
+   */
+  async loadBeatmapPreview(osuFilePath: string) {
+    console.log(`ScenarioManager loading beatmap preview from = ${osuFilePath}`);
+    this.audioEngine.destroy();
+    this.scenario$.next({ status: "LOADING" });
+
+    const absoluteFolderPath = dirname(osuFilePath);
+    const rawBlueprint = await readFile(osuFilePath, "utf-8");
+    const blueprint = parseBlueprint(rawBlueprint);
+    const { metadata } = blueprint.blueprintInfo;
+
+    try {
+      this.beatmapBackgroundSettingsStore.texture$.next(
+        await this.textureManager.loadTexture(localFile(join(absoluteFolderPath, metadata.backgroundFile))),
+      );
+    } catch {
+      this.beatmapBackgroundSettingsStore.texture$.next(Texture.EMPTY);
+    }
+
+    this.audioEngine.setSong(await this.audioService.loadAudio(localFile(join(absoluteFolderPath, metadata.audioFile))));
+    this.audioEngine.song?.mediaElement.addEventListener("loadedmetadata", () => {
+      const duration = (this.audioEngine.song?.mediaElement.duration ?? 0) * 1000;
+      this.gameClock.setDuration(duration);
+    });
+
+    const beatmap = buildBeatmap(blueprint, { addStacking: true, mods: [] });
+
+    this.modSettingsService.setHidden(false);
+    this.modSettingsService.setHiddenAvailable(false);
+    this.gameClock.pause();
+    this.gameClock.setSpeed(1.0);
+    this.gameClock.seekTo(0);
+    this.beatmapManager.setBeatmap(beatmap);
+    this.replayManager.setMainReplay(null);
+    this.gameSimulator.clear();
+    this.hitsoundPlayer.clear();
+
+    await this.sceneManager.changeToScene(AnalysisSceneKeys.ANALYSIS);
+    this.gameLoop.startTicker();
+    this.scenario$.next({ status: "DONE" });
   }
 
   async addSubReplay() {}

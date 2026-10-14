@@ -1,8 +1,10 @@
 import { ipcMain } from "electron";
 import ffmpegStatic = require("ffmpeg-static");
-import { execFile } from "child_process";
+import { execFile, spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { once } from "events";
 import { existsSync } from "fs";
 import { rename, unlink } from "fs/promises";
+import { join } from "path";
 
 export interface SpeedAudioRequest {
   input: string;
@@ -19,8 +21,10 @@ function ffmpegPath(): string {
 function run(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(ffmpegPath(), args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) reject(new Error(stderr.trim().split("\n").pop() || error.message));
-      else resolve({ stdout, stderr });
+      if (error) {
+        const lines = stderr.trim().split("\n").filter(Boolean);
+        reject(new Error(lines.slice(-6).join(" | ") || error.message));
+      } else resolve({ stdout, stderr });
     });
   });
 }
@@ -86,6 +90,291 @@ export async function createSpeedAudio({ input, output, rate, changePitch }: Spe
   return { output, reused: false };
 }
 
+export interface TrimAudioRequest {
+  input: string;
+  output: string;
+  startMs: number;
+  endMs: number;
+}
+
+export async function createTrimmedAudio({ input, output, startMs, endMs }: TrimAudioRequest) {
+  if (!existsSync(input)) throw new Error(`File audio non trovato: ${input}`);
+  const start = Math.max(0, startMs) / 1000;
+  const duration = Math.max(0, endMs - startMs) / 1000;
+  if (duration <= 0) throw new Error("Intervallo audio non valido");
+
+  const temp = `${output}.part.mp3`;
+  try {
+    await run([
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-ss",
+      start.toFixed(3),
+      "-i",
+      input,
+      "-t",
+      duration.toFixed(3),
+      "-vn",
+      "-c:a",
+      "libmp3lame",
+      "-q:a",
+      "2",
+      temp,
+    ]);
+    await rename(temp, output);
+  } catch (e) {
+    await unlink(temp).catch(() => undefined);
+    throw e;
+  }
+  return { output };
+}
+
+export interface ConvertToMp4Request {
+  input: string;
+  output: string;
+  fps: number;
+  /** Target output height; width follows the aspect ratio. Omit to keep the captured size. */
+  height?: number;
+  crf?: number;
+}
+
+export async function convertToMp4({ input, output, height, crf }: ConvertToMp4Request) {
+  if (!existsSync(input)) throw new Error(`File video non trovato: ${input}`);
+  // libx264 needs even dimensions and yuv420p; always normalise both in the filter chain.
+  const scale = height && height > 0 ? `scale=-2:${height}` : "scale=trunc(iw/2)*2:trunc(ih/2)*2";
+  const args = [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-i",
+    input,
+    "-vf",
+    `${scale},format=yuv420p`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    String(crf ?? 20),
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    output,
+  ];
+  await run(args);
+  return { output };
+}
+
+// --- Offline video assembly (osr2mp4-style: render frames, then encode with ffmpeg) ---
+
+let cachedEncoder: string | null = null;
+
+async function encoderWorks(encoder: string): Promise<boolean> {
+  try {
+    await run([
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=64x64:rate=1:d=1",
+      "-frames:v",
+      "1",
+      "-c:v",
+      encoder,
+      "-f",
+      "null",
+      "-",
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Picks the best available H.264 encoder: GPU (NVIDIA/AMD/Intel) if it works, else libx264. */
+export async function detectH264Encoder(): Promise<string> {
+  if (cachedEncoder) return cachedEncoder;
+  for (const encoder of ["h264_nvenc", "h264_amf", "h264_qsv"]) {
+    if (await encoderWorks(encoder)) {
+      cachedEncoder = encoder;
+      return encoder;
+    }
+  }
+  cachedEncoder = "libx264";
+  return cachedEncoder;
+}
+
+function encoderArgs(encoder: string, crf: number): string[] {
+  switch (encoder) {
+    case "h264_nvenc":
+      return ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", String(crf)];
+    case "h264_amf":
+      return ["-c:v", "h264_amf", "-quality", "quality", "-rc", "cqp", "-qp_i", String(crf), "-qp_p", String(crf)];
+    case "h264_qsv":
+      return ["-c:v", "h264_qsv", "-global_quality", String(crf)];
+    default:
+      return ["-c:v", "libx264", "-preset", "veryfast", "-crf", String(crf)];
+  }
+}
+
+export interface AssembleVideoRequest {
+  framesDir: string;
+  framePattern: string; // e.g. "f_%06d.png"
+  sourceFps: number;
+  outputFps: number;
+  audioPath?: string;
+  audioTempo?: number; // atempo for DT/HT; 1 = unchanged
+  tmixFrames?: number; // >1 enables motion-blur resampling
+  upscaleHeight?: number; // lanczos upscale target height
+  crf: number;
+  encoder: string;
+  output: string;
+}
+
+export async function assembleVideo(req: AssembleVideoRequest) {
+  const vf: string[] = [];
+  if (req.tmixFrames && req.tmixFrames > 1) {
+    vf.push(`tmix=frames=${req.tmixFrames}:weights=${Array(req.tmixFrames).fill("1").join(" ")}`);
+  }
+  if (req.upscaleHeight && req.upscaleHeight > 0) vf.push(`scale=-2:${req.upscaleHeight}:flags=lanczos`);
+  vf.push("format=yuv420p");
+
+  const args = [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-framerate",
+    String(req.sourceFps),
+    "-i",
+    join(req.framesDir, req.framePattern),
+  ];
+  if (req.audioPath) args.push("-i", req.audioPath);
+  args.push("-vf", vf.join(","), "-r", String(req.outputFps));
+  args.push(...encoderArgs(req.encoder, req.crf));
+  if (req.audioPath) {
+    if (req.audioTempo && Math.abs(req.audioTempo - 1) > 1e-6) args.push("-filter:a", tempoChain(req.audioTempo));
+    args.push("-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "192k", "-shortest");
+  }
+  args.push(req.output);
+  await run(args);
+  return { output: req.output };
+}
+
+// --- Streaming video export: raw RGBA frames piped straight into ffmpeg (osr2mp4-style) ---
+
+export interface VideoStreamStartRequest {
+  width: number;
+  height: number;
+  sourceFps: number;
+  outputFps: number;
+  tmixFrames?: number; // motion-blur frame blending
+  upscaleHeight?: number;
+  crf: number;
+  encoder: string;
+  audioPath?: string;
+  audioTempo?: number;
+  output: string;
+}
+
+let exportProc: ChildProcessWithoutNullStreams | null = null;
+let exportStderr = "";
+
+function exportError(code: number | null): Error {
+  const tail = exportStderr.trim().split("\n").filter(Boolean).slice(-6).join(" | ");
+  return new Error(tail || `ffmpeg exited with code ${code}`);
+}
+
+export function videoExportStart(req: VideoStreamStartRequest): void {
+  if (exportProc) throw new Error("A video export is already running");
+
+  const vf: string[] = [];
+  if (req.tmixFrames && req.tmixFrames > 1) {
+    vf.push(`tmix=frames=${req.tmixFrames}:weights=${Array(req.tmixFrames).fill("1").join(" ")}`);
+  }
+  if (req.upscaleHeight && req.upscaleHeight > 0) vf.push(`scale=-2:${req.upscaleHeight}:flags=lanczos`);
+  vf.push("format=yuv420p");
+
+  const args = [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-f",
+    "rawvideo",
+    "-pixel_format",
+    "rgba",
+    "-video_size",
+    `${req.width}x${req.height}`,
+    "-framerate",
+    String(req.sourceFps),
+    "-i",
+    "pipe:0",
+  ];
+  if (req.audioPath) args.push("-i", req.audioPath);
+  args.push("-vf", vf.join(","), "-r", String(req.outputFps));
+  args.push(...encoderArgs(req.encoder, req.crf));
+  if (req.audioPath) {
+    if (req.audioTempo && Math.abs(req.audioTempo - 1) > 1e-6) args.push("-filter:a", tempoChain(req.audioTempo));
+    args.push("-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "192k", "-shortest");
+  }
+  args.push(req.output);
+
+  exportStderr = "";
+  const proc = spawn(ffmpegPath(), args, { windowsHide: true });
+  exportProc = proc;
+  proc.stderr.on("data", (d) => (exportStderr += d.toString()));
+  proc.stdin.on("error", () => undefined); // EPIPE if ffmpeg dies early; surfaced on finish
+  proc.on("close", () => (exportProc = proc === exportProc ? null : exportProc));
+}
+
+export async function videoExportFrame(frame: Buffer): Promise<void> {
+  const proc = exportProc;
+  if (!proc || !proc.stdin.writable) throw exportError(proc?.exitCode ?? null);
+  if (!proc.stdin.write(frame)) await once(proc.stdin, "drain");
+}
+
+export function videoExportFinish(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = exportProc;
+    if (!proc) {
+      reject(new Error("No video export running"));
+      return;
+    }
+    proc.on("close", (code) => {
+      exportProc = null;
+      if (code === 0) resolve();
+      else reject(exportError(code));
+    });
+    proc.stdin.end();
+  });
+}
+
+export function videoExportCancel(): void {
+  if (exportProc) {
+    try {
+      exportProc.kill();
+    } catch {
+      /* already gone */
+    }
+    exportProc = null;
+  }
+}
+
 export function setupSpeedAudioListeners() {
   ipcMain.handle("speedChangeAudio", (event, request: SpeedAudioRequest) => createSpeedAudio(request));
+  ipcMain.handle("trimAudio", (event, request: TrimAudioRequest) => createTrimmedAudio(request));
+  ipcMain.handle("convertToMp4", (event, request: ConvertToMp4Request) => convertToMp4(request));
+  ipcMain.handle("detectVideoEncoder", () => detectH264Encoder());
+  ipcMain.handle("assembleVideo", (event, request: AssembleVideoRequest) => assembleVideo(request));
+  ipcMain.handle("videoExportStart", (event, request: VideoStreamStartRequest) => videoExportStart(request));
+  ipcMain.handle("videoExportFrame", (event, frame: Buffer) => videoExportFrame(frame));
+  ipcMain.handle("videoExportFinish", () => videoExportFinish());
+  ipcMain.handle("videoExportCancel", () => videoExportCancel());
 }

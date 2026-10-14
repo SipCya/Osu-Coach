@@ -28,12 +28,12 @@ export interface RateOptions {
 
 const SECTION = /^\[(.+)\]\s*$/;
 
-interface Line {
+export interface Line {
   section: string;
   text: string;
 }
 
-function splitLines(raw: string): Line[] {
+export function splitLines(raw: string): Line[] {
   let section = "";
   return raw.split(/\r?\n/).map((text) => {
     const m = SECTION.exec(text.trim());
@@ -42,19 +42,19 @@ function splitLines(raw: string): Line[] {
   });
 }
 
-function keyValue(text: string): [string, string] | null {
+export function keyValue(text: string): [string, string] | null {
   const i = text.indexOf(":");
   if (i < 0) return null;
   return [text.slice(0, i).trim(), text.slice(i + 1).trim()];
 }
 
-interface TimingPoint {
+export interface TimingPoint {
   time: number;
   beatLength: number;
   uninherited: boolean;
 }
 
-function parseTimingPoint(text: string): TimingPoint | null {
+export function parseTimingPoint(text: string): TimingPoint | null {
   const parts = text.split(",");
   if (parts.length < 2) return null;
   const time = Number(parts[0]);
@@ -64,7 +64,7 @@ function parseTimingPoint(text: string): TimingPoint | null {
   return { time, beatLength, uninherited };
 }
 
-function objectEndTime(text: string): number | null {
+export function objectEndTime(text: string): number | null {
   const parts = text.split(",");
   if (parts.length < 4) return null;
   const time = Number(parts[2]);
@@ -307,7 +307,7 @@ export function defaultVersionName(info: BeatmapInfo, rate: number): string {
   return `${info.version} ${bpm}bpm ${formatRate(rate)}`;
 }
 
-const INVALID_FILE_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+export const INVALID_FILE_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
 
 export function osuFileName(info: BeatmapInfo, version: string): string {
   const name = `${info.artist} - ${info.title} (${info.creator}) [${version}].osu`;

@@ -41,6 +41,22 @@ export class AudioEngine {
     this.song.connect(this.musicGain);
   }
 
+  /** Taps the master output into a MediaStream so a recording can include the audio. */
+  createRecordingStream(): { stream: MediaStream; stop: () => void } {
+    const destination = this.audioContext.createMediaStreamDestination();
+    this.masterGain.connect(destination);
+    return {
+      stream: destination.stream,
+      stop: () => {
+        try {
+          this.masterGain.disconnect(destination);
+        } catch {
+          /* already disconnected */
+        }
+      },
+    };
+  }
+
   setupListeners() {
     this.gameClock.seeked$.subscribe(this.seekTo.bind(this));
     this.gameClock.isPlaying$.subscribe((isPlaying: boolean) => {

@@ -21,10 +21,10 @@ async function userSelectFile(defaultPath: string) {
   }
 }
 
-async function userSelectSaveFile(defaultPath: string) {
+async function userSelectSaveFile(defaultPath: string, filters?: { name: string; extensions: string[] }[]) {
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath,
-    filters: [{ name: "PNG", extensions: ["png"] }],
+    filters: filters ?? [{ name: "PNG", extensions: ["png"] }],
   });
   return canceled || !filePath ? null : filePath;
 }
@@ -43,6 +43,10 @@ function getPath(type: string) {
       return app.getPath("userData");
     case "logs":
       return app.getPath("logs");
+    case "desktop":
+      return app.getPath("desktop");
+    case "videos":
+      return app.getPath("videos");
     case "appResources":
       return appResourcesPath();
   }
@@ -53,7 +57,7 @@ export function setupEventListeners() {
   ipcMain.handle("getPath", (event, type) => getPath(type));
   ipcMain.handle("selectDirectory", (event, defaultPath) => userSelectDirectory(defaultPath));
   ipcMain.handle("selectFile", (event, defaultPath) => userSelectFile(defaultPath));
-  ipcMain.handle("selectSaveFile", (event, defaultPath) => userSelectSaveFile(defaultPath));
+  ipcMain.handle("selectSaveFile", (event, defaultPath, filters) => userSelectSaveFile(defaultPath, filters));
   ipcMain.handle("getPlatform", () => process.platform);
   ipcMain.handle("getAppVersion", () => app.getVersion());
   ipcMain.handle("reboot", () => {

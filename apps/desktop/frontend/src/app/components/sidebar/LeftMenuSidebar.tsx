@@ -11,6 +11,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ELECTRON_UPDATE_FLAG } from "../../utils/constants";
 import { useAppInfo } from "../../hooks/app-info";
 import { useSettingsModalContext } from "../../providers/SettingsProvider";
+import { ignoreFocus } from "../../utils/focus";
 
 const tooltipPosition = {
   anchorOrigin: {
@@ -130,7 +131,7 @@ export function LeftMenuSidebar() {
       </Tooltip>
       {inReplayViewer && (
         <Tooltip title={t("settings.title")} placement={"right"}>
-          <IconButton onClick={() => onSettingsModalOpenChange(true)}>
+          <IconButton onClick={() => onSettingsModalOpenChange(true)} onFocus={ignoreFocus}>
             <Settings />
           </IconButton>
         </Tooltip>

@@ -32,6 +32,7 @@ import { IdleScene } from "./scenes/IdleScene";
 import { KeyPressWithNoteSheetPreparer } from "../renderers/components/keypresses/KeyPressOverlay";
 import { ModSettingsService } from "./mod-settings";
 import { ScreenshotTaker } from "./screenshot";
+import { VideoExporter } from "./VideoExporter";
 import { STAGE_TYPES } from "../types";
 
 export function createAnalysisApp(commonContainer: Container) {
@@ -49,6 +50,7 @@ export function createAnalysisApp(commonContainer: Container) {
 
   container.bind(ScreenshotTaker).toSelf();
   container.bind(ClipRecorder).toSelf();
+  container.bind(VideoExporter).toSelf();
   container.bind(ReplayFileWatcher).toSelf();
 
   container.bind(TextureManager).toSelf();

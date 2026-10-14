@@ -4,9 +4,18 @@ import { LeftMenuSidebar } from "./components/sidebar/LeftMenuSidebar";
 import { SplashScreen } from "./screens/splash/SplashScreen";
 import { HomeScreen } from "./screens/home/HomeScreen";
 import { Box, Divider, Stack, Tab, Tabs } from "@mui/material";
-import { Brush, CleaningServices, CollectionsBookmark, FlashlightOn, GpsFixed, Speed } from "@mui/icons-material";
+import {
+  Brush,
+  CleaningServices,
+  CollectionsBookmark,
+  ContentCut,
+  FlashlightOn,
+  GpsFixed,
+  Speed,
+} from "@mui/icons-material";
 import { FaMicroscope } from "react-icons/fa";
 import { SpeedChanger } from "./screens/speed-changer/SpeedChanger";
+import { MapPractice } from "./screens/map-practice/MapPractice";
 import { useTranslation } from "./i18n";
 import { UpdateModal } from "./components/update/UpdateModal";
 import { useEffect } from "react";
@@ -30,6 +39,8 @@ function TopMenu() {
   const navigate = useNavigate();
   const value = location.pathname.includes("speed-changer")
     ? "speed-changer"
+    : location.pathname.includes("practice")
+    ? "practice"
     : location.pathname.includes("collections")
     ? "collections"
     : location.pathname.includes("cleaner")
@@ -72,6 +83,14 @@ function TopMenu() {
         icon={<Speed />}
         iconPosition={"start"}
         label={t("nav.speedChanger")}
+        onFocus={(e: React.FocusEvent<HTMLElement>) => e.currentTarget.blur()}
+        sx={tabSx}
+      />
+      <Tab
+        value={"practice"}
+        icon={<ContentCut />}
+        iconPosition={"start"}
+        label={t("nav.practice")}
         onFocus={(e: React.FocusEvent<HTMLElement>) => e.currentTarget.blur()}
         sx={tabSx}
       />
@@ -185,6 +204,7 @@ export function OsuCoachApp() {
         <Route path={"home"} element={<HomeScreen />} />
         <Route path={"analyzer"} element={<Analyzer />} />
         <Route path={"speed-changer"} element={<SpeedChanger />} />
+        <Route path={"practice"} element={<MapPractice />} />
         <Route path={"collections"} element={<CollectionManagerScreen />} />
         <Route path={"cleaner"} element={<MapCleaner />} />
         <Route path={"trainer"} element={<AimTrainer />} />
