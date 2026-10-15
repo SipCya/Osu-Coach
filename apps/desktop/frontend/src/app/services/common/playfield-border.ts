@@ -18,4 +18,8 @@ export class PlayfieldBorderSettingsStore {
   get settings() {
     return this.settings$.getValue();
   }
+
+  setEnabled(enabled: boolean) {
+    this.settings$.next({ ...this.settings, enabled });
+  }
 }

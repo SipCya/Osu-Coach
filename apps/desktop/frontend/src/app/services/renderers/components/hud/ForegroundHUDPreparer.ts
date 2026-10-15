@@ -1,6 +1,13 @@
-import { injectable } from "inversify";
+import { inject, injectable } from "inversify";
 import { GameSimulator } from "../../../common/game/GameSimulator";
-import { Container, Text } from "pixi.js";
+import { Container, Sprite, Text } from "pixi.js";
+import { existsSync } from "fs";
+import { join } from "path";
+import { pathToFileURL } from "url";
+import { SkinLoader } from "../../../common/local/SkinLoader";
+import { SkinSettingsStore } from "../../../common/skin";
+import { stringToSkinId } from "../../../../model/SkinId";
+import { STAGE_TYPES } from "../../../types";
 import {
   calculateDigits,
   OsuClassicAccuracy,
@@ -15,10 +22,27 @@ import { mean, standardDeviation } from "simple-statistics";
 import { HitErrorBarSettingsStore } from "../../../common/hit-error-bar";
 import { HudOverlaySettingsStore } from "../../../common/hud-overlay";
 import { SkinHolder } from "../../../common/skin";
-import { Beatmap } from "@osujs/core";
-import { calculateDifficultyAttributes, calculatePerformanceAttributes, DifficultyAttributes } from "@osujs/pp";
 
 const OVERLAY_STYLE = { fontFamily: "Arial", fontWeight: "bold" as const, fill: 0xffffff, stroke: 0x000000 };
+
+const MOD_ICON_FILE: Record<string, string> = {
+  NO_FAIL: "nofail",
+  EASY: "easy",
+  HIDDEN: "hidden",
+  HARD_ROCK: "hardrock",
+  DOUBLE_TIME: "doubletime",
+  NIGHT_CORE: "nightcore",
+  HALF_TIME: "halftime",
+  FLASH_LIGHT: "flashlight",
+  SPUN_OUT: "spunout",
+  RELAX: "relax",
+  AUTO_PILOT: "relax2",
+  AUTO_PLAY: "autoplay",
+  SUDDEN_DEATH: "suddendeath",
+  PERFECT: "perfect",
+};
+const MOD_ICON_HEIGHT = 50;
+const MOD_ICON_STEP = 42;
 
 function calculateUnstableRate(x: number[]) {
   return x.length === 0 ? 0 : standardDeviation(x) * 10;
@@ -33,8 +57,9 @@ export class ForegroundHUDPreparer {
   container: Container;
   stats: Text;
   hitErrorBar: OsuClassicHitErrorBar;
-  ppText: Text;
   urText: Text;
+  modIcons: Container;
+  private modIconsKey = "";
 
   /** When false, the debug stats text is hidden (used for a clean osu!-like video export). */
   showStats = true;
@@ -45,11 +70,6 @@ export class ForegroundHUDPreparer {
   allHits: number[] = [];
   recentHits: number[] = [];
 
-  private ppMap: Beatmap | null = null;
-  private ppAttrs: DifficultyAttributes | null = null;
-  private ppCountsKey = "";
-  private ppValue = 0;
-
   constructor(
     private readonly beatmapManager: BeatmapManager,
     private readonly skinManager: SkinHolder,
@@ -57,66 +77,66 @@ export class ForegroundHUDPreparer {
     private readonly gameplayClock: GameplayClock,
     private readonly hitErrorBarSettingsStore: HitErrorBarSettingsStore,
     private readonly hudOverlaySettingsStore: HudOverlaySettingsStore,
+    private readonly skinLoader: SkinLoader,
+    private readonly skinSettingsStore: SkinSettingsStore,
+    @inject(STAGE_TYPES.BUILT_IN_SKINS_FOLDER) private readonly builtInSkinsFolder: string,
   ) {
     this.container = new Container();
     this.stats = new Text("", { fontSize: 16, fill: 0xeeeeee, fontFamily: "Arial", align: "left" });
     this.hitErrorBar = new OsuClassicHitErrorBar();
-    this.ppText = new Text("", { ...OVERLAY_STYLE, fontSize: 30, strokeThickness: 4 });
     this.urText = new Text("", { ...OVERLAY_STYLE, fontSize: 22, strokeThickness: 3 });
+    this.modIcons = new Container();
   }
 
-  private runningPp(): number {
-    const beatmap = this.beatmapManager.getBeatmap();
-    if (!beatmap || beatmap.hitObjects.length === 0) return 0;
-    if (this.ppMap !== beatmap) {
-      try {
-        const list = calculateDifficultyAttributes(beatmap, true);
-        this.ppAttrs = list[list.length - 1] ?? null;
-      } catch {
-        this.ppAttrs = null;
-      }
-      this.ppMap = beatmap;
-      this.ppCountsKey = "";
-      this.ppValue = 0;
+  private currentSkinFolder(): string {
+    try {
+      return this.skinLoader.resolveToPath(stringToSkinId(this.skinSettingsStore.settings.preferredSkinId));
+    } catch {
+      return "";
     }
-    if (!this.ppAttrs) return 0;
-    const info = this.gameSimulator.getCurrentInfo();
-    if (!info) return this.ppValue;
-    const c = info.verdictCounts;
-    const key = `${c[0]},${c[1]},${c[2]},${c[3]},${info.maxComboSoFar}`;
-    if (key !== this.ppCountsKey) {
-      try {
-        this.ppValue = calculatePerformanceAttributes(this.ppAttrs, {
-          mods: beatmap.appliedMods ?? [],
-          maxCombo: info.maxComboSoFar,
-          countGreat: c[0],
-          countOk: c[1],
-          countMeh: c[2],
-          countMiss: c[3],
-        }).total;
-      } catch {
-        /* keep last value on error */
-      }
-      this.ppCountsKey = key;
-    }
-    return this.ppValue;
+  }
+
+  private resolveModIcon(file: string): string | null {
+    const name = `selection-mod-${file}.png`;
+    const inSkin = join(this.currentSkinFolder(), name);
+    if (existsSync(inSkin)) return inSkin;
+    const fallback = join(this.builtInSkinsFolder, "YUGEN", name);
+    return existsSync(fallback) ? fallback : null;
+  }
+
+  /** Builds the mod icon sprites from the current skin (cached until mods or skin change). */
+  private buildModIcons(mods: string[]) {
+    const key = `${this.currentSkinFolder()}|${mods.join(",")}`;
+    if (key === this.modIconsKey) return;
+    this.modIconsKey = key;
+    this.modIcons.removeChildren();
+
+    const resolved = mods.map((m) => this.resolveModIcon(MOD_ICON_FILE[m] ?? "")).filter((p): p is string => !!p);
+    resolved.forEach((path, i) => {
+      const sprite = Sprite.from(pathToFileURL(path).href);
+      sprite.anchor.set(0.5);
+      sprite.scale.set(MOD_ICON_HEIGHT / 128);
+      sprite.position.set(MOD_ICON_HEIGHT / 2 + i * MOD_ICON_STEP, MOD_ICON_HEIGHT / 2);
+      this.modIcons.addChild(sprite);
+    });
+    const width = resolved.length ? (resolved.length - 1) * MOD_ICON_STEP + MOD_ICON_HEIGHT : 0;
+    this.modIcons.position.set(STAGE_WIDTH - 15 - width, 48);
   }
 
   updateOverlays() {
     const s = this.hudOverlaySettingsStore.settings;
-    let y = 35;
-    if (s.showPp) {
-      this.ppText.text = `${Math.round(this.runningPp())}pp`;
-      this.ppText.anchor.set(0.5, 0);
-      this.ppText.position.set(STAGE_WIDTH / 2, y);
-      this.container.addChild(this.ppText);
-      y += 36;
-    }
     if (s.showUr) {
       this.urText.text = `UR ${calculateUnstableRate(this.allHits).toFixed(0)}`;
       this.urText.anchor.set(0.5, 0);
-      this.urText.position.set(STAGE_WIDTH / 2, y);
+      this.urText.position.set(STAGE_WIDTH / 2, 35);
       this.container.addChild(this.urText);
+    }
+    if (s.showMods) {
+      const mods = this.beatmapManager.getBeatmap()?.appliedMods ?? [];
+      if (mods.length > 0) {
+        this.buildModIcons(mods);
+        this.container.addChild(this.modIcons);
+      }
     }
   }
 

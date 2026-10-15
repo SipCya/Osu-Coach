@@ -1,4 +1,4 @@
-import { Bin, FrametimeReport, histogram, Snap } from "./cheat-check";
+import { Bin, cheatVerdict, Flag, FrametimeReport, histogram, Snap } from "./cheat-check";
 
 export interface CheatReportData {
   player: string;
@@ -10,9 +10,12 @@ export interface CheatReportData {
   frametime: FrametimeReport;
   snaps: Snap[];
   maxCursorSpeed: number;
+  flags: Flag[];
 }
 
 const ACCENT = "#ff66aa";
+const SUSPECT = "#ff5c5c";
+const SEVERITY_COLOR: Record<string, string> = { high: "#ff5c5c", medium: "#ffb347", low: "#ffd166" };
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -40,7 +43,7 @@ function niceStep(roughMax: number, targetTicks: number): number {
 }
 
 /** Interactive bar chart over numeric bins: hover tooltip, X labels, a Y axis with gridlines, and a mean line. */
-function barChart(bins: Bin[], opts: { mean?: number; unit: string; color?: string }): string {
+function barChart(bins: Bin[], opts: { mean?: number; unit: string; color?: string; suspect?: (b: Bin) => boolean }): string {
   if (bins.length === 0 || bins.every((b) => b.count === 0)) return `<p class="muted">No data.</p>`;
   const color = opts.color ?? ACCENT;
   const W = 680;
@@ -74,11 +77,12 @@ function barChart(bins: Bin[], opts: { mean?: number; unit: string; color?: stri
       const h = (b.count / max) * plotH;
       const x = padLeft + i * bw;
       const y = H - padBottom - h;
-      const tip = `${fmtNum(b.from)}..${fmtNum(b.to)} ${opts.unit} — ${b.count}`;
+      const flagged = opts.suspect?.(b) ?? false;
+      const tip = `${fmtNum(b.from)}..${fmtNum(b.to)} ${opts.unit} — ${b.count}${flagged ? " ⚠️ suspicious" : ""}`;
       return `<rect class="bar" data-tip="${esc(tip)}" x="${(x + 1).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(
         1,
         bw - 2,
-      ).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${color}"></rect>`;
+      ).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${flagged ? SUSPECT : color}"></rect>`;
     })
     .join("");
 
@@ -139,6 +143,25 @@ export function buildCheatReportHtml(data: CheatReportData): string {
   // Frame-time histogram (from the existing buckets) → numeric bins.
   const ftBins: Bin[] = data.frametime.histogram.map((b) => ({ from: b.ms, to: b.ms + 2, count: b.count }));
 
+  // Dominant key-hold bin (for highlighting an auto-clicker-like spike).
+  const holdTotal = data.holdDurations.length;
+  const holdDomCount = Math.max(0, ...holdBins.map((b) => b.count));
+  const holdDomSuspect = holdTotal > 0 && holdDomCount / holdTotal > 0.5;
+
+  const flagsHtml =
+    data.flags.length === 0
+      ? `<div class="flag ok">✓ No suspicious patterns flagged.</div>`
+      : data.flags
+          .map(
+            (f) =>
+              `<div class="flag" style="border-left-color:${SEVERITY_COLOR[f.severity]}"><b style="color:${
+                SEVERITY_COLOR[f.severity]
+              }">${f.severity.toUpperCase()}</b> · <b>${esc(f.title)}</b><div class="flagdetail">${esc(
+                f.detail,
+              )}</div></div>`,
+          )
+          .join("");
+
   const snapRows =
     data.snaps.length === 0
       ? `<p class="muted">No suspicious cursor snaps found.</p>`
@@ -182,6 +205,10 @@ export function buildCheatReportHtml(data: CheatReportData): string {
   .meanlabel { fill: #ffd166; font-size: 11px; font-weight: 700; }
   #tip { position: fixed; pointer-events: none; z-index: 20; background: #000; color: #fff; border: 1px solid ${ACCENT}; padding: 5px 9px; border-radius: 6px; font-size: 0.82rem; opacity: 0; transition: opacity .08s; white-space: nowrap; }
   .explain { color: #b8b8c6; font-size: 0.9rem; margin: 10px 2px 0; }
+  .flag { background: #1e1e27; border: 1px solid #2c2c38; border-left: 4px solid #ff5c5c; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
+  .flag.ok { border-left-color: #4caf50; color: #9fdca3; }
+  .verdict { display: inline-block; color: #15151b; font-weight: 800; padding: 5px 14px; border-radius: 8px; margin-bottom: 10px; }
+  .flagdetail { color: #b8b8c6; font-size: 0.86rem; margin-top: 3px; }
   .muted { color: #8a8a99; }
   table { width: 100%; border-collapse: collapse; margin-top: 6px; }
   th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #2c2c38; font-size: 0.9rem; }
@@ -194,9 +221,18 @@ export function buildCheatReportHtml(data: CheatReportData): string {
   <div class="disclaimer">⚠️ These are heuristic hints, not proof. Review them yourself before drawing any conclusion.</div>
   <div class="tiles">${tiles}</div>
 
+  <h2>⚠️ Flags</h2>
+  ${(() => {
+    const v = cheatVerdict(data.flags);
+    const c = v === "suspicious" ? "#ff5c5c" : v === "review" ? "#ffb347" : "#4caf50";
+    const label = v === "suspicious" ? "Suspicious" : v === "review" ? "Worth reviewing" : "Likely legit";
+    return `<div class="verdict" style="background:${c}">${label}</div>`;
+  })()}
+  ${flagsHtml}
+
   ${section(
     "Frame times (timewarp)",
-    barChart(ftBins, { mean: data.frametime.meanMs, unit: "ms" }),
+    barChart(ftBins, { mean: data.frametime.meanMs, unit: "ms", suspect: (b) => b.from < 8 && b.count > 0 }),
     `Distribution of the time between replay frames. Median ${data.frametime.medianMs.toFixed(1)} ms (~${Math.round(
       data.frametime.impliedFps,
     )} FPS). Timewarp shows up as frame times clustered at an impossibly low, very regular value — but high-refresh monitors legitimately produce low values, so judge the shape, not a single number.${
@@ -212,7 +248,11 @@ export function buildCheatReportHtml(data: CheatReportData): string {
 
   ${section(
     "Key-hold duration per circle",
-    barChart(holdBins, { mean: holdMean, unit: "ms" }),
+    barChart(holdBins, {
+      mean: holdMean,
+      unit: "ms",
+      suspect: holdDomSuspect ? (b) => b.count === holdDomCount : undefined,
+    }),
     `How long the key stayed held for each hit circle (${data.holdDurations.length} measured). Humans vary; a spike of near-identical durations can hint at an auto-clicker or bot.`,
   )}
 

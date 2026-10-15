@@ -27,7 +27,9 @@ import { ignoreFocus } from "../../utils/focus";
 import {
   analyzeFrametimes,
   analyzeSnaps,
+  cheatVerdict,
   compareReplays,
+  computeCheatFlags,
   keyHoldDurations,
   maxCursorSpeed,
   meanOf,
@@ -96,20 +98,18 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
 
   const openReport = async () => {
     if (!replay || !reports) return;
-    const rate = analyzer.beatmapManager.getBeatmap()?.gameClockRate ?? 1;
-    const offsets = analyzer.gameSimulator.hits.map(([, offset]) => offset / rate);
-    const hitTimes = analyzer.gameSimulator.hits.filter(([, , hit]) => hit).map(([time]) => time);
     const beatmap = analyzer.beatmapManager.getBeatmap() as { metadata?: { title?: string } };
     const html = buildCheatReportHtml({
       player: replay.player,
       title: beatmap?.metadata?.title ?? "osu! replay",
       ur: reports.ur,
-      meanError: meanOf(offsets),
-      offsets,
-      holdDurations: keyHoldDurations(replay.frames, hitTimes),
+      meanError: meanOf(reports.offsets),
+      offsets: reports.offsets,
+      holdDurations: reports.holdDurations,
       frametime: reports.frametime,
       snaps: reports.snaps.snaps,
-      maxCursorSpeed: maxCursorSpeed(replay.frames),
+      maxCursorSpeed: reports.maxSpeed,
+      flags: reports.flags,
     });
     const file = join(tmpdir(), `osucoach-cheat-report-${Date.now()}.html`);
     await writeFile(file, html, "utf-8");
@@ -120,11 +120,13 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
     if (!replay) return null;
     const rate = analyzer.beatmapManager.getBeatmap()?.gameClockRate ?? 1;
     const offsets = analyzer.gameSimulator.hits.map(([, offset]) => offset / rate);
-    return {
-      ur: unstableRate(offsets),
-      frametime: analyzeFrametimes(replay.frames),
-      snaps: analyzeSnaps(replay.frames),
-    };
+    const hitTimes = analyzer.gameSimulator.hits.filter(([, , hit]) => hit).map(([time]) => time);
+    const frametime = analyzeFrametimes(replay.frames);
+    const snaps = analyzeSnaps(replay.frames);
+    const holdDurations = keyHoldDurations(replay.frames, hitTimes);
+    const maxSpeed = maxCursorSpeed(replay.frames);
+    const flags = computeCheatFlags({ frametime, offsets, holdDurations, snaps: snaps.snaps, maxCursorSpeed: maxSpeed });
+    return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, maxSpeed, flags };
   }, [replay, analyzer]);
 
   const compare = async () => {
@@ -166,6 +168,41 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
             <Typography variant={"body2"} color={"text.secondary"}>
               {t("cheat.player", { player: replay.player })}
             </Typography>
+
+            {reports &&
+              (() => {
+                const verdict = cheatVerdict(reports.flags);
+                const color = verdict === "suspicious" ? "#ff5c5c" : verdict === "review" ? "#ffb347" : "#4caf50";
+                return (
+                  <Box sx={{ mt: 1 }}>
+                    <Chip
+                      label={t(
+                        verdict === "suspicious"
+                          ? "cheat.verdictSuspicious"
+                          : verdict === "review"
+                          ? "cheat.verdictReview"
+                          : "cheat.verdictLegit",
+                      )}
+                      sx={{ backgroundColor: color, color: "#15151b", fontWeight: 800, mb: 1 }}
+                    />
+                    {reports.flags.length === 0 ? (
+                      <Alert severity={"success"}>{t("cheat.noFlags")}</Alert>
+                    ) : (
+                      <Stack gap={0.5}>
+                        {reports.flags.map((f) => (
+                          <Alert
+                            key={f.id}
+                            severity={f.severity === "high" ? "error" : f.severity === "medium" ? "warning" : "info"}
+                            sx={{ py: 0.1 }}
+                          >
+                            <b>{f.title}</b> — {f.detail}
+                          </Alert>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                );
+              })()}
 
             <Section title={t("cheat.ur")}>
               <Typography variant={"h5"} sx={{ fontWeight: 800, color: ACCENT }}>

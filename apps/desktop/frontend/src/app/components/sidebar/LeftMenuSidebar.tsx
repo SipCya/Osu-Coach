@@ -2,7 +2,6 @@ import { useTranslation } from "../../i18n";
 import { AppLogo } from "../logo/AppLogo";
 import { Box, Button, Divider, IconButton, Stack, Tooltip } from "@mui/material";
 import { Home, Settings } from "@mui/icons-material";
-import { FaMicroscope } from "react-icons/fa";
 import React, { useCallback, useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/redux";
 import UpdateIcon from "@mui/icons-material/Update";
@@ -119,13 +118,6 @@ export function LeftMenuSidebar() {
         <Link to={"home"}>
           <IconButton color={buttonColor("/home")}>
             <Home />
-          </IconButton>
-        </Link>
-      </Tooltip>
-      <Tooltip title={t("sidebar.analyzer")} placement={"right"}>
-        <Link to={"analyzer"}>
-          <IconButton color={buttonColor("/analyzer")}>
-            <FaMicroscope height={"0.75em"} />
           </IconButton>
         </Link>
       </Tooltip>

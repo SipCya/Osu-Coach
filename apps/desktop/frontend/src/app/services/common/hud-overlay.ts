@@ -4,22 +4,22 @@ import { PersistentService } from "../core/service";
 
 export interface HudOverlaySettings {
   showUr: boolean;
-  showPp: boolean;
   showKeys: boolean;
+  showMods: boolean;
 }
 
 export const DEFAULT_HUD_OVERLAY_SETTINGS: HudOverlaySettings = Object.freeze({
   showUr: false,
-  showPp: false,
   showKeys: true,
+  showMods: false,
 });
 
 export const HudOverlaySettingsSchema: JSONSchemaType<HudOverlaySettings> = {
   type: "object",
   properties: {
     showUr: { type: "boolean", default: DEFAULT_HUD_OVERLAY_SETTINGS.showUr },
-    showPp: { type: "boolean", default: DEFAULT_HUD_OVERLAY_SETTINGS.showPp },
     showKeys: { type: "boolean", default: DEFAULT_HUD_OVERLAY_SETTINGS.showKeys },
+    showMods: { type: "boolean", default: DEFAULT_HUD_OVERLAY_SETTINGS.showMods },
   },
   required: [],
 };
@@ -36,10 +36,10 @@ export class HudOverlaySettingsStore extends PersistentService<HudOverlaySetting
   setShowUr(showUr: boolean) {
     this.changeSettings((s) => (s.showUr = showUr));
   }
-  setShowPp(showPp: boolean) {
-    this.changeSettings((s) => (s.showPp = showPp));
-  }
   setShowKeys(showKeys: boolean) {
     this.changeSettings((s) => (s.showKeys = showKeys));
+  }
+  setShowMods(showMods: boolean) {
+    this.changeSettings((s) => (s.showMods = showMods));
   }
 }

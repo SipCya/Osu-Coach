@@ -7,6 +7,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
   IconButton,
@@ -26,7 +27,7 @@ import { join } from "path";
 import { useObservable } from "rxjs-hooks";
 import { useTranslation } from "../../i18n";
 import { frontendAPI } from "../../api";
-import { useAnalysisApp, useCommonManagers } from "../../providers/TheaterProvider";
+import { useAnalysisApp } from "../../providers/TheaterProvider";
 import { ignoreFocus } from "../../utils/focus";
 
 const ACCENT = "#ff66aa";
@@ -36,20 +37,73 @@ const PINK_SWITCH = {
 };
 const BAR = { "& .MuiLinearProgress-bar": { backgroundColor: ACCENT } };
 
+function Opt({
+  label,
+  checked,
+  onChange,
+  disabled,
+  hint,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  hint?: string;
+}) {
+  return (
+    <Box sx={{ width: "50%", minWidth: 180 }}>
+      <FormControlLabel
+        control={
+          <Switch size={"small"} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} sx={PINK_SWITCH} />
+        }
+        label={label}
+      />
+      {hint && (
+        <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", ml: 2, mt: -0.5 }}>
+          {hint}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function sectionTitle(text: string) {
+  return (
+    <Typography variant={"subtitle2"} sx={{ fontWeight: 700, mt: 2, mb: 0.5 }}>
+      {text}
+    </Typography>
+  );
+}
+
 function ExportDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const analyzer = useAnalysisApp();
-  const { beatmapBackgroundSettingsStore } = useCommonManagers();
   const progress = useObservable(() => analyzer.videoExporter.exportProgress$, { phase: "idle" as const, value: 0 });
-  const background = useObservable(() => beatmapBackgroundSettingsStore.settings$, { dim: 0.8, blur: 0.4, enabled: true });
 
+  // Video
   const [fps, setFps] = useState(60);
   const [renderHeight, setRenderHeight] = useState(1080);
-  const [upscale, setUpscale] = useState(0); // 0 = off, else target height
-  const [blurFactor, setBlurFactor] = useState(1); // motion blur: render fps × this, blend down
-  const [clean, setClean] = useState(true);
+  const [upscale, setUpscale] = useState(0);
+  const [blurFactor, setBlurFactor] = useState(1);
+  // Audio & timing
   const [includeAudio, setIncludeAudio] = useState(true);
   const [startAtFirstObject, setStartAtFirstObject] = useState(true);
+  // Visuals (independent from the Reviewer)
+  const [backgroundDim, setBackgroundDim] = useState(80);
+  const [backgroundBlur, setBackgroundBlur] = useState(0);
+  const [showCursor, setShowCursor] = useState(true);
+  const [showCursorTrail, setShowCursorTrail] = useState(true);
+  const [cursorScale, setCursorScale] = useState(100);
+  const [applyReplayMods, setApplyReplayMods] = useState(true);
+  // Overlays
+  const [showKeys, setShowKeys] = useState(false);
+  const [showUr, setShowUr] = useState(false);
+  const [showMods, setShowMods] = useState(false);
+  const [showHitErrorBar, setShowHitErrorBar] = useState(false);
+  const [hitErrorBarScale, setHitErrorBarScale] = useState(100);
+  const [showPlayfieldBorder, setShowPlayfieldBorder] = useState(false);
+  const [showAnalysisCursor, setShowAnalysisCursor] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const busy = progress.phase === "rendering" || progress.phase === "encoding";
 
@@ -68,9 +122,22 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
       renderHeight,
       upscaleHeight: upscale || undefined,
       blurFactor,
-      clean,
       includeAudio,
       startAtFirstObject,
+      backgroundDim: backgroundDim / 100,
+      backgroundBlur: backgroundBlur / 100,
+      showCursor,
+      showCursorTrail,
+      cursorScale: cursorScale / 100,
+      showAnalysisCursor,
+      showHitErrorBar,
+      hitErrorBarScale: hitErrorBarScale / 100,
+      showPlayfieldBorder,
+      showKeys,
+      showUr,
+      showMods,
+      showStats,
+      applyReplayMods,
       defaultFileName,
     });
   };
@@ -79,23 +146,23 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth={"sm"}>
       <DialogTitle>{t("ev.title")}</DialogTitle>
       <DialogContent dividers>
-        <Typography variant={"body2"} color={"text.secondary"} sx={{ mb: 2 }}>
+        <Typography variant={"body2"} color={"text.secondary"} sx={{ mb: 1 }}>
           {t("ev.hint")}
         </Typography>
 
-        <Stack direction={"row"} gap={2} flexWrap={"wrap"} sx={{ mb: 2 }}>
-          <FormControl size={"small"} sx={{ minWidth: 110 }}>
+        {sectionTitle(t("ev.video"))}
+        <Stack direction={"row"} gap={2} flexWrap={"wrap"}>
+          <FormControl size={"small"} sx={{ minWidth: 100 }}>
             <InputLabel>{t("ev.fps")}</InputLabel>
             <Select label={t("ev.fps")} value={fps} onChange={(e) => setFps(Number(e.target.value))} disabled={busy}>
-              <MenuItem value={30}>30</MenuItem>
-              <MenuItem value={60}>60</MenuItem>
-              <MenuItem value={120}>120</MenuItem>
-              <MenuItem value={240}>240</MenuItem>
-              <MenuItem value={480}>480</MenuItem>
-              <MenuItem value={960}>960</MenuItem>
+              {[30, 60, 120, 240, 480, 960].map((v) => (
+                <MenuItem key={v} value={v}>
+                  {v}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
-          <FormControl size={"small"} sx={{ minWidth: 130 }}>
+          <FormControl size={"small"} sx={{ minWidth: 120 }}>
             <InputLabel>{t("ev.resolution")}</InputLabel>
             <Select
               label={t("ev.resolution")}
@@ -107,20 +174,15 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
               <MenuItem value={1080}>1080p</MenuItem>
             </Select>
           </FormControl>
-          <FormControl size={"small"} sx={{ minWidth: 150 }}>
+          <FormControl size={"small"} sx={{ minWidth: 130 }}>
             <InputLabel>{t("ev.upscale")}</InputLabel>
-            <Select
-              label={t("ev.upscale")}
-              value={upscale}
-              onChange={(e) => setUpscale(Number(e.target.value))}
-              disabled={busy}
-            >
+            <Select label={t("ev.upscale")} value={upscale} onChange={(e) => setUpscale(Number(e.target.value))} disabled={busy}>
               <MenuItem value={0}>{t("ev.upscaleOff")}</MenuItem>
               <MenuItem value={1440}>1440p</MenuItem>
               <MenuItem value={2160}>4K</MenuItem>
             </Select>
           </FormControl>
-          <FormControl size={"small"} sx={{ minWidth: 150 }}>
+          <FormControl size={"small"} sx={{ minWidth: 130 }}>
             <InputLabel>{t("ev.motionBlur")}</InputLabel>
             <Select
               label={t("ev.motionBlur")}
@@ -129,60 +191,76 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
               disabled={busy}
             >
               <MenuItem value={1}>{t("ev.motionBlurOff")}</MenuItem>
-              <MenuItem value={2}>×2</MenuItem>
-              <MenuItem value={4}>×4</MenuItem>
-              <MenuItem value={8}>×8</MenuItem>
-              <MenuItem value={16}>×16</MenuItem>
+              {[2, 4, 8, 16].map((v) => (
+                <MenuItem key={v} value={v}>
+                  ×{v}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Stack>
         {blurFactor > 1 && (
-          <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", mb: 1 }}>
+          <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", mt: 0.5 }}>
             {t("ev.motionBlurHint", { src: fps * blurFactor })}
           </Typography>
         )}
 
-        <Box sx={{ mb: 1 }}>
-          <Typography variant={"body2"} sx={{ mb: 0.5 }}>
-            {t("ev.backgroundDim", { pct: Math.round(background.dim * 100) })}
-          </Typography>
-          <Slider
-            size={"small"}
-            value={Math.round(background.dim * 100)}
-            min={0}
-            max={100}
-            step={1}
-            disabled={busy}
-            onChange={(_, v) => beatmapBackgroundSettingsStore.setDim((v as number) / 100)}
-            sx={{ color: ACCENT, maxWidth: 320 }}
-          />
+        {sectionTitle(t("ev.visuals"))}
+        <Typography variant={"caption"} sx={{ color: ACCENT, display: "block", mb: 0.5 }}>
+          {t("ev.visualsNote")}
+        </Typography>
+        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+          <Box sx={{ flex: 1, minWidth: 220 }}>
+            <Typography variant={"caption"}>{t("ev.backgroundDim", { pct: backgroundDim })}</Typography>
+            <Slider size={"small"} value={backgroundDim} min={0} max={100} disabled={busy} onChange={(_, v) => setBackgroundDim(v as number)} sx={{ color: ACCENT }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 220 }}>
+            <Typography variant={"caption"}>{t("ev.backgroundBlur", { pct: backgroundBlur })}</Typography>
+            <Slider size={"small"} value={backgroundBlur} min={0} max={100} disabled={busy} onChange={(_, v) => setBackgroundBlur(v as number)} sx={{ color: ACCENT }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 220 }}>
+            <Typography variant={"caption"}>{t("ev.cursorSize", { pct: cursorScale })}</Typography>
+            <Slider
+              size={"small"}
+              value={cursorScale}
+              min={10}
+              max={200}
+              disabled={busy || !showCursor}
+              onChange={(_, v) => setCursorScale(v as number)}
+              sx={{ color: ACCENT }}
+            />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 220 }}>
+            <Typography variant={"caption"}>{t("ev.hitErrorBarScale", { pct: hitErrorBarScale })}</Typography>
+            <Slider
+              size={"small"}
+              value={hitErrorBarScale}
+              min={10}
+              max={300}
+              disabled={busy || !showHitErrorBar}
+              onChange={(_, v) => setHitErrorBarScale(v as number)}
+              sx={{ color: ACCENT }}
+            />
+          </Box>
+        </Box>
+        <Box sx={{ display: "flex", flexWrap: "wrap" }}>
+          <Opt label={t("ev.cursor")} checked={showCursor} onChange={setShowCursor} disabled={busy} />
+          <Opt label={t("ev.cursorTrail")} checked={showCursorTrail} onChange={setShowCursorTrail} disabled={busy || !showCursor} />
+          <Opt label={t("ev.applyReplayMods")} checked={applyReplayMods} onChange={setApplyReplayMods} disabled={busy} />
+          <Opt label={t("ev.includeAudio")} checked={includeAudio} onChange={setIncludeAudio} disabled={busy} />
+          <Opt label={t("ev.startAtFirstObject")} checked={startAtFirstObject} onChange={setStartAtFirstObject} disabled={busy} />
         </Box>
 
-        <FormControlLabel
-          control={
-            <Switch
-              checked={startAtFirstObject}
-              onChange={(e) => setStartAtFirstObject(e.target.checked)}
-              sx={PINK_SWITCH}
-              disabled={busy}
-            />
-          }
-          label={t("ev.startAtFirstObject")}
-        />
-        <br />
-        <FormControlLabel
-          control={<Switch checked={clean} onChange={(e) => setClean(e.target.checked)} sx={PINK_SWITCH} disabled={busy} />}
-          label={t("ev.cleanLook")}
-        />
-        <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", mb: 1 }}>
-          {clean ? t("ev.cleanLookOn") : t("ev.cleanLookOff")}
-        </Typography>
-        <FormControlLabel
-          control={
-            <Switch checked={includeAudio} onChange={(e) => setIncludeAudio(e.target.checked)} sx={PINK_SWITCH} disabled={busy} />
-          }
-          label={t("ev.includeAudio")}
-        />
+        {sectionTitle(t("ev.overlays"))}
+        <Box sx={{ display: "flex", flexWrap: "wrap" }}>
+          <Opt label={t("ev.overlayKeys")} checked={showKeys} onChange={setShowKeys} disabled={busy} />
+          <Opt label={t("ev.overlayUr")} checked={showUr} onChange={setShowUr} disabled={busy} />
+          <Opt label={t("ev.overlayMods")} checked={showMods} onChange={setShowMods} disabled={busy} />
+          <Opt label={t("ev.hitErrorBar")} checked={showHitErrorBar} onChange={setShowHitErrorBar} disabled={busy} />
+          <Opt label={t("ev.playfieldBorder")} checked={showPlayfieldBorder} onChange={setShowPlayfieldBorder} disabled={busy} />
+          <Opt label={t("ev.analysisCursor")} checked={showAnalysisCursor} onChange={setShowAnalysisCursor} disabled={busy} />
+          <Opt label={t("ev.stats")} checked={showStats} onChange={setShowStats} disabled={busy} />
+        </Box>
 
         {progress.phase === "rendering" && (
           <Box sx={{ mt: 2 }}>

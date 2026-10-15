@@ -14,8 +14,14 @@ import { AnalysisStage } from "../renderers/components/stage/AnalysisStage";
 import { AudioEngine } from "../common/audio/AudioEngine";
 import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
 import { BeatmapManager } from "../manager/BeatmapManager";
+import { ReplayManager } from "../manager/ReplayManager";
 import { HitErrorBarSettingsStore } from "../common/hit-error-bar";
+import { PlayfieldBorderSettingsStore } from "../common/playfield-border";
+import { BeatmapBackgroundSettingsStore } from "../common/beatmap-background";
+import { ReplayCursorSettingsStore } from "../common/replay-cursor";
+import { HudOverlaySettingsStore } from "../common/hud-overlay";
 import { AnalysisCursorSettingsStore } from "./analysis-cursor";
+import { ModSettingsService } from "./mod-settings";
 
 const START_LEAD_IN_MS = 2000;
 
@@ -67,13 +73,29 @@ export interface ExportProgress {
 }
 
 export interface VideoExportOptions {
+  // Video
   outputFps: number;
   renderHeight: number; // base render height (720/1080); width follows 16:9
   upscaleHeight?: number; // optional lanczos upscale target (e.g. 2160)
   blurFactor: number; // motion blur: render at outputFps × this, blend down (1 = off)
-  clean: boolean; // clean osu! look vs with osu!coach data
+  // Audio & timing
   includeAudio: boolean; // mux the song + hitsounds
   startAtFirstObject: boolean; // skip the empty intro before the first circle
+  // Visuals — all independent from the Reviewer's live settings
+  backgroundDim: number; // 0..1
+  backgroundBlur: number; // 0..1
+  showCursor: boolean;
+  showCursorTrail: boolean;
+  cursorScale: number; // 0.1..2.0
+  showAnalysisCursor: boolean;
+  showHitErrorBar: boolean;
+  hitErrorBarScale: number; // multiplier
+  showPlayfieldBorder: boolean;
+  showKeys: boolean;
+  showUr: boolean;
+  showMods: boolean;
+  showStats: boolean;
+  applyReplayMods: boolean; // apply the replay's HD/FL visually
   defaultFileName: string;
 }
 
@@ -91,8 +113,14 @@ export class VideoExporter {
     private readonly audioEngine: AudioEngine,
     private readonly hitsoundPlayer: HitsoundPlayer,
     private readonly beatmapManager: BeatmapManager,
+    private readonly replayManager: ReplayManager,
     private readonly hitErrorBarSettingsStore: HitErrorBarSettingsStore,
+    private readonly playfieldBorderSettingsStore: PlayfieldBorderSettingsStore,
+    private readonly beatmapBackgroundSettingsStore: BeatmapBackgroundSettingsStore,
+    private readonly replayCursorSettingsStore: ReplayCursorSettingsStore,
+    private readonly hudOverlaySettingsStore: HudOverlaySettingsStore,
     private readonly analysisCursorSettingsStore: AnalysisCursorSettingsStore,
+    private readonly modSettingsService: ModSettingsService,
   ) {}
 
   get isExporting() {
@@ -152,8 +180,16 @@ export class VideoExporter {
 
     const prevW = renderer.screen.width;
     const prevH = renderer.screen.height;
-    const prevHitError = this.hitErrorBarSettingsStore.settings.enabled;
-    const prevAnalysisCursor = this.analysisCursorSettingsStore.settings.enabled;
+    // Snapshot every live setting the render reads, so the export is fully independent and we can restore after.
+    const snapshot = {
+      bg: { ...this.beatmapBackgroundSettingsStore.settings },
+      cursor: { ...this.replayCursorSettingsStore.settings },
+      analysisCursor: { ...this.analysisCursorSettingsStore.settings },
+      hitError: { ...this.hitErrorBarSettingsStore.settings },
+      border: { ...this.playfieldBorderSettingsStore.settings },
+      overlay: { ...this.hudOverlaySettingsStore.settings },
+      mods: { ...this.modSettingsService.modSettings },
+    };
     let rt: RenderTexture | null = null;
     let wavTemp: string | undefined;
     let started = false;
@@ -161,11 +197,34 @@ export class VideoExporter {
     try {
       this.gameLoop.stopTicker();
       this.gameClock.pause();
-      if (options.clean) {
-        this.hitErrorBarSettingsStore.changeSettings((s) => (s.enabled = false));
-        this.analysisCursorSettingsStore.changeSettings((s) => (s.enabled = false));
-      }
-      this.analysisStage.setCleanLook(options.clean);
+
+      // Apply the export's own options (independent from the Reviewer).
+      this.beatmapBackgroundSettingsStore.changeSettings((s) => {
+        s.enabled = true;
+        s.dim = options.backgroundDim;
+        s.blur = options.backgroundBlur;
+      });
+      this.replayCursorSettingsStore.changeSettings((s) => {
+        s.enabled = options.showCursor;
+        s.showTrail = options.showCursorTrail;
+        s.scale = options.cursorScale;
+      });
+      this.analysisCursorSettingsStore.changeSettings((s) => (s.enabled = options.showAnalysisCursor));
+      this.hitErrorBarSettingsStore.changeSettings((s) => {
+        s.enabled = options.showHitErrorBar;
+        s.scale = options.hitErrorBarScale;
+      });
+      this.playfieldBorderSettingsStore.setEnabled(options.showPlayfieldBorder);
+      this.hudOverlaySettingsStore.changeSettings((s) => {
+        s.showKeys = options.showKeys;
+        s.showUr = options.showUr;
+        s.showMods = options.showMods;
+      });
+      this.analysisStage.setCleanLook(!options.showStats);
+      const replayMods = this.replayManager.getMainReplay()?.mods ?? [];
+      this.modSettingsService.setHidden(options.applyReplayMods && replayMods.includes("HIDDEN"));
+      this.modSettingsService.setFlashlight(options.applyReplayMods && replayMods.includes("FLASH_LIGHT"));
+
       renderer.resize(width, height);
       rt = RenderTexture.create({ width, height });
       const extract = renderer.plugins.extract;
@@ -233,11 +292,33 @@ export class VideoExporter {
       rt?.destroy(true);
       renderer.resize(prevW, prevH);
       this.renderManager.resizeCanvasToDisplaySize();
+      // Restore the Reviewer's live settings exactly as they were.
+      this.beatmapBackgroundSettingsStore.changeSettings((s) => {
+        s.enabled = snapshot.bg.enabled;
+        s.dim = snapshot.bg.dim;
+        s.blur = snapshot.bg.blur;
+      });
+      this.replayCursorSettingsStore.changeSettings((s) => {
+        s.enabled = snapshot.cursor.enabled;
+        s.showTrail = snapshot.cursor.showTrail;
+        s.smoothCursorTrail = snapshot.cursor.smoothCursorTrail;
+        s.scale = snapshot.cursor.scale;
+        s.scaleWithCS = snapshot.cursor.scaleWithCS;
+      });
+      this.analysisCursorSettingsStore.changeSettings((s) => (s.enabled = snapshot.analysisCursor.enabled));
+      this.hitErrorBarSettingsStore.changeSettings((s) => {
+        s.enabled = snapshot.hitError.enabled;
+        s.scale = snapshot.hitError.scale;
+      });
+      this.playfieldBorderSettingsStore.setEnabled(snapshot.border.enabled);
+      this.hudOverlaySettingsStore.changeSettings((s) => {
+        s.showKeys = snapshot.overlay.showKeys;
+        s.showUr = snapshot.overlay.showUr;
+        s.showMods = snapshot.overlay.showMods;
+      });
       this.analysisStage.setCleanLook(false);
-      if (options.clean) {
-        this.hitErrorBarSettingsStore.changeSettings((s) => (s.enabled = prevHitError));
-        this.analysisCursorSettingsStore.changeSettings((s) => (s.enabled = prevAnalysisCursor));
-      }
+      this.modSettingsService.setHidden(snapshot.mods.hidden);
+      this.modSettingsService.setFlashlight(snapshot.mods.flashlight);
       this.gameClock.seekTo(0);
       this.gameLoop.startTicker();
       this.exporting = false;

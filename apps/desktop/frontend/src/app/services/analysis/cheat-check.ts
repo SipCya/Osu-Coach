@@ -233,6 +233,151 @@ function timeBounds(frames: ReplayFrame[]): { min: number; max: number } {
   return { min: times.length ? Math.min(...times) : 0, max: times.length ? Math.max(...times) : 0 };
 }
 
+// --- Suspicion flags -------------------------------------------------------
+
+export type Severity = "low" | "medium" | "high";
+
+export interface Flag {
+  id: string;
+  severity: Severity;
+  title: string;
+  detail: string;
+}
+
+export interface FlagInput {
+  frametime: FrametimeReport;
+  offsets: number[];
+  holdDurations: number[];
+  snaps: Snap[];
+  maxCursorSpeed: number;
+}
+
+/** Fraction of the dominant histogram bin (how concentrated the values are). */
+function dominantRatio(values: number[], binSize: number): number {
+  if (values.length === 0) return 0;
+  const max = Math.max(...values);
+  const bins = histogram(values, binSize, 0, Math.max(binSize, Math.ceil(max / binSize) * binSize));
+  const top = Math.max(...bins.map((b) => b.count));
+  return top / values.length;
+}
+
+/** Fraction of frame times below a physically-implausible threshold. */
+export function fastFrameRatio(frametime: FrametimeReport, thresholdMs = 8): number {
+  if (frametime.frameCount === 0) return 0;
+  const below = frametime.histogram.filter((b) => b.ms < thresholdMs).reduce((a, b) => a + b.count, 0);
+  return below / frametime.frameCount;
+}
+
+/**
+ * Heuristic suspicion flags. Thresholds are conservative and approximate — these are hints, not proof.
+ */
+export function computeCheatFlags(input: FlagInput): Flag[] {
+  const flags: Flag[] = [];
+  const { frametime, offsets, holdDurations, snaps, maxCursorSpeed } = input;
+
+  // Timewarp: very fast + very regular frame times, or many impossibly fast frames.
+  const fastRatio = fastFrameRatio(frametime);
+  if (frametime.frameCount > 100) {
+    if (frametime.medianMs > 0 && frametime.medianMs < 8 && frametime.cv < 0.25) {
+      flags.push({
+        id: "timewarp",
+        severity: "high",
+        title: "Possible timewarp",
+        detail: `Median frame time ${frametime.medianMs.toFixed(1)}ms and very regular — unusual for normal play.`,
+      });
+    } else if (fastRatio > 0.3) {
+      flags.push({
+        id: "fast-frames",
+        severity: "medium",
+        title: "Many very fast frames",
+        detail: `${Math.round(fastRatio * 100)}% of frames are under 8ms (high-refresh monitors can cause this too).`,
+      });
+    }
+  }
+
+  // Unstable rate: suspiciously low (too consistent).
+  if (offsets.length >= 20) {
+    const ur = unstableRate(offsets);
+    if (ur > 0 && ur < 40) {
+      flags.push({
+        id: "low-ur",
+        severity: "high",
+        title: "Extremely low unstable rate",
+        detail: `UR ${ur.toFixed(1)} — unusually consistent (can hint at relax; strong players can also be consistent).`,
+      });
+    } else if (ur < 55) {
+      flags.push({
+        id: "low-ur",
+        severity: "medium",
+        title: "Very low unstable rate",
+        detail: `UR ${ur.toFixed(1)} — quite consistent.`,
+      });
+    }
+  }
+
+  // Key holds: near-identical durations (auto-clicker / bot signature).
+  if (holdDurations.length >= 20) {
+    const m = mean(holdDurations);
+    const cv = m > 0 ? standardDeviation(holdDurations) / m : 0;
+    const dom = dominantRatio(holdDurations, 3);
+    if (cv < 0.08 || dom > 0.8) {
+      flags.push({
+        id: "uniform-holds",
+        severity: "high",
+        title: "Near-identical key holds",
+        detail: `Key-hold durations are extremely uniform (can hint at an auto-clicker/bot).`,
+      });
+    } else if (cv < 0.15 || dom > 0.6) {
+      flags.push({
+        id: "uniform-holds",
+        severity: "medium",
+        title: "Very uniform key holds",
+        detail: `Key-hold durations are quite uniform.`,
+      });
+    }
+  }
+
+  // Cursor snaps.
+  if (snaps.length > 80) {
+    flags.push({ id: "snaps", severity: "high", title: "Many cursor snaps", detail: `${snaps.length} sharp reversals.` });
+  } else if (snaps.length > 30) {
+    flags.push({
+      id: "snaps",
+      severity: "medium",
+      title: "Several cursor snaps",
+      detail: `${snaps.length} sharp reversals.`,
+    });
+  }
+
+  // Impossibly fast cursor.
+  if (maxCursorSpeed > 20) {
+    flags.push({
+      id: "cursor-speed",
+      severity: "high",
+      title: "Impossibly fast cursor",
+      detail: `Peak cursor speed ${maxCursorSpeed.toFixed(1)} px/ms.`,
+    });
+  } else if (maxCursorSpeed > 12) {
+    flags.push({
+      id: "cursor-speed",
+      severity: "medium",
+      title: "Very fast cursor movement",
+      detail: `Peak cursor speed ${maxCursorSpeed.toFixed(1)} px/ms.`,
+    });
+  }
+
+  return flags;
+}
+
+export type VerdictLevel = "legit" | "review" | "suspicious";
+
+/** One overall verdict from the flags: any high → suspicious, any flag → review, none → legit. */
+export function cheatVerdict(flags: Flag[]): VerdictLevel {
+  if (flags.some((f) => f.severity === "high")) return "suspicious";
+  if (flags.length > 0) return "review";
+  return "legit";
+}
+
 export function compareReplays(a: ReplayFrame[], b: ReplayFrame[], stepMs = 25): SimilarityReport {
   const ba = timeBounds(a);
   const bb = timeBounds(b);

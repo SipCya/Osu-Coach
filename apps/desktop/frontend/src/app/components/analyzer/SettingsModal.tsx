@@ -236,8 +236,8 @@ function OverlaySettings() {
       <Row label={t("settings.overlayUr")}>
         <Switch checked={overlay.showUr} onChange={(e) => hudOverlaySettingsStore.setShowUr(e.target.checked)} />
       </Row>
-      <Row label={t("settings.overlayPp")} description={t("settings.overlayPpHint")}>
-        <Switch checked={overlay.showPp} onChange={(e) => hudOverlaySettingsStore.setShowPp(e.target.checked)} />
+      <Row label={t("settings.overlayMods")}>
+        <Switch checked={overlay.showMods} onChange={(e) => hudOverlaySettingsStore.setShowMods(e.target.checked)} />
       </Row>
     </Section>
   );
