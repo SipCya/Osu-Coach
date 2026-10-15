@@ -30,7 +30,7 @@ import {
   cheatVerdict,
   compareReplays,
   computeCheatFlags,
-  keyHoldDurations,
+  keyHoldDurationsByKey,
   maxCursorSpeed,
   meanOf,
   SimilarityReport,
@@ -123,9 +123,18 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
     const hitTimes = analyzer.gameSimulator.hits.filter(([, , hit]) => hit).map(([time]) => time);
     const frametime = analyzeFrametimes(replay.frames);
     const snaps = analyzeSnaps(replay.frames);
-    const holdDurations = keyHoldDurations(replay.frames, hitTimes);
+    const { left, right } = keyHoldDurationsByKey(replay.frames, hitTimes);
+    const holdDurations = [...left, ...right];
     const maxSpeed = maxCursorSpeed(replay.frames);
-    const flags = computeCheatFlags({ frametime, offsets, holdDurations, snaps: snaps.snaps, maxCursorSpeed: maxSpeed });
+    const flags = computeCheatFlags({
+      frametime,
+      offsets,
+      holdDurations,
+      leftHolds: left,
+      rightHolds: right,
+      snaps: snaps.snaps,
+      maxCursorSpeed: maxSpeed,
+    });
     return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, maxSpeed, flags };
   }, [replay, analyzer]);
 

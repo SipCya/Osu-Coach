@@ -7,6 +7,8 @@ export interface CheatReportData {
   meanError: number;
   offsets: number[];
   holdDurations: number[];
+  leftHolds: number[];
+  rightHolds: number[];
   frametime: FrametimeReport;
   snaps: Snap[];
   maxCursorSpeed: number;
@@ -114,6 +116,69 @@ function barChart(bins: Bin[], opts: { mean?: number; unit: string; color?: stri
     ${yGrid.join("")}
     <line x1="${padLeft}" y1="${H - padBottom}" x2="${W - padRight}" y2="${H - padBottom}" class="axisline" />
     ${rects}${labels}${unitLabel}${meanMark}
+  </svg>`;
+}
+
+const LEFT_COLOR = ACCENT;
+const RIGHT_COLOR = "#5cc8ff";
+
+/** Two overlaid histograms (left vs right key) on the same axes. Bins must share the same ranges. */
+function barChartDual(left: Bin[], right: Bin[], unit: string): string {
+  const bins = left.length ? left : right;
+  if (bins.length === 0 || (left.every((b) => b.count === 0) && right.every((b) => b.count === 0)))
+    return `<p class="muted">No data.</p>`;
+  const W = 680;
+  const H = 240;
+  const padLeft = 38;
+  const padRight = 14;
+  const padTop = 24;
+  const padBottom = 34;
+  const plotW = W - padLeft - padRight;
+  const plotH = H - padTop - padBottom;
+  const max = Math.max(1, ...left.map((b) => b.count), ...right.map((b) => b.count));
+  const bw = plotW / bins.length;
+  const yStep = Math.max(1, niceStep(max, 4));
+
+  const yGrid: string[] = [];
+  for (let v = 0; v <= max + 1e-9; v += yStep) {
+    const y = H - padBottom - (v / max) * plotH;
+    yGrid.push(
+      `<line x1="${padLeft}" y1="${y.toFixed(1)}" x2="${W - padRight}" y2="${y.toFixed(1)}" class="gridline" />` +
+        `<text x="${padLeft - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" class="axis">${v}</text>`,
+    );
+  }
+
+  const series = (bb: Bin[], color: string, key: string) =>
+    bb
+      .map((b, i) => {
+        if (b.count === 0) return "";
+        const h = (b.count / max) * plotH;
+        const x = padLeft + i * bw;
+        const y = H - padBottom - h;
+        const tip = `${key} · ${fmtNum(b.from)}..${fmtNum(b.to)} ${unit} — ${b.count}`;
+        return `<rect class="bar" data-tip="${esc(tip)}" x="${(x + 1).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(
+          1,
+          bw - 2,
+        ).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${color}" fill-opacity="0.6"></rect>`;
+      })
+      .join("");
+
+  const labelEvery = Math.max(1, Math.ceil(24 / bw));
+  const labels = bins
+    .map((b, i) => {
+      if (i % labelEvery !== 0 && i !== bins.length - 1) return "";
+      const x = padLeft + i * bw + bw / 2;
+      return `<text x="${x.toFixed(1)}" y="${H - padBottom + 15}" text-anchor="middle" class="axis">${fmtNum(
+        b.from,
+      )}</text>`;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="xMidYMid meet">
+    ${yGrid.join("")}
+    <line x1="${padLeft}" y1="${H - padBottom}" x2="${W - padRight}" y2="${H - padBottom}" class="axisline" />
+    ${series(left, LEFT_COLOR, "Left")}${series(right, RIGHT_COLOR, "Right")}${labels}
+    <text x="${W - padRight}" y="${H - 4}" text-anchor="end" class="axis">${esc(unit)}</text>
   </svg>`;
 }
 
@@ -232,7 +297,7 @@ export function buildCheatReportHtml(data: CheatReportData): string {
 
   ${section(
     "Frame times (timewarp)",
-    barChart(ftBins, { mean: data.frametime.meanMs, unit: "ms", suspect: (b) => b.from < 8 && b.count > 0 }),
+    barChart(ftBins, { mean: data.frametime.meanMs, unit: "ms", suspect: (b) => b.from < 4 && b.count > 0 }),
     `Distribution of the time between replay frames. Median ${data.frametime.medianMs.toFixed(1)} ms (~${Math.round(
       data.frametime.impliedFps,
     )} FPS). Timewarp shows up as frame times clustered at an impossibly low, very regular value — but high-refresh monitors legitimately produce low values, so judge the shape, not a single number.${

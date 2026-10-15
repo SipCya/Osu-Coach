@@ -101,24 +101,35 @@ export function maxCursorSpeed(frames: ReplayFrame[]): number {
  * How long each key stayed held for the circles that were hit, in ms.
  * Relax/replay-bots tend to produce unnaturally consistent hold durations.
  */
-export function keyHoldDurations(frames: ReplayFrame[], hitTimes: number[]): number[] {
-  const intervals: { start: number; end: number }[] = [];
+interface KeyInterval {
+  key: number;
+  start: number;
+  end: number;
+}
+
+function keyIntervals(frames: ReplayFrame[]): KeyInterval[] {
+  const intervals: KeyInterval[] = [];
   const held: Record<number, number | null> = { [OsuAction.leftButton]: null, [OsuAction.rightButton]: null };
   for (const f of frames) {
     for (const key of [OsuAction.leftButton, OsuAction.rightButton]) {
       const down = f.actions.includes(key);
       if (down && held[key] === null) held[key] = f.time;
       else if (!down && held[key] !== null) {
-        intervals.push({ start: held[key] as number, end: f.time });
+        intervals.push({ key, start: held[key] as number, end: f.time });
         held[key] = null;
       }
     }
   }
-  intervals.sort((a, b) => a.start - b.start);
+  return intervals.sort((a, b) => a.start - b.start);
+}
 
-  const durations: number[] = [];
+/** For each hit, the duration (ms) of the nearest key press, split by which key it was. */
+export function keyHoldDurationsByKey(frames: ReplayFrame[], hitTimes: number[]): { left: number[]; right: number[] } {
+  const intervals = keyIntervals(frames);
+  const left: number[] = [];
+  const right: number[] = [];
   for (const t of hitTimes) {
-    let best: { start: number; end: number } | null = null;
+    let best: KeyInterval | null = null;
     let bestDist = Infinity;
     for (const iv of intervals) {
       const d = Math.abs(iv.start - t);
@@ -127,9 +138,17 @@ export function keyHoldDurations(frames: ReplayFrame[], hitTimes: number[]): num
         best = iv;
       }
     }
-    if (best && bestDist < 100) durations.push(Math.max(0, best.end - best.start));
+    if (best && bestDist < 100) {
+      const dur = Math.max(0, best.end - best.start);
+      (best.key === OsuAction.leftButton ? left : right).push(dur);
+    }
   }
-  return durations;
+  return { left, right };
+}
+
+export function keyHoldDurations(frames: ReplayFrame[], hitTimes: number[]): number[] {
+  const { left, right } = keyHoldDurationsByKey(frames, hitTimes);
+  return [...left, ...right];
 }
 
 /** Positive frame-to-frame time deltas, dropping the seek/seed frames and pauses. */
@@ -248,6 +267,8 @@ export interface FlagInput {
   frametime: FrametimeReport;
   offsets: number[];
   holdDurations: number[];
+  leftHolds: number[];
+  rightHolds: number[];
   snaps: Snap[];
   maxCursorSpeed: number;
 }
@@ -273,74 +294,84 @@ export function fastFrameRatio(frametime: FrametimeReport, thresholdMs = 8): num
  */
 export function computeCheatFlags(input: FlagInput): Flag[] {
   const flags: Flag[] = [];
-  const { frametime, offsets, holdDurations, snaps, maxCursorSpeed } = input;
+  const { frametime, offsets, holdDurations, leftHolds, rightHolds, snaps, maxCursorSpeed } = input;
 
-  // Timewarp: very fast + very regular frame times, or many impossibly fast frames.
-  const fastRatio = fastFrameRatio(frametime);
-  if (frametime.frameCount > 100) {
-    if (frametime.medianMs > 0 && frametime.medianMs < 8 && frametime.cv < 0.25) {
-      flags.push({
-        id: "timewarp",
-        severity: "high",
-        title: "Possible timewarp",
-        detail: `Median frame time ${frametime.medianMs.toFixed(1)}ms and very regular — unusual for normal play.`,
-      });
-    } else if (fastRatio > 0.3) {
-      flags.push({
-        id: "fast-frames",
-        severity: "medium",
-        title: "Many very fast frames",
-        detail: `${Math.round(fastRatio * 100)}% of frames are under 8ms (high-refresh monitors can cause this too).`,
-      });
-    }
+  // Timewarp: only flag physically implausible, very regular, very fast frame times
+  // (kept strict because high-refresh monitors legitimately produce low frame times).
+  if (frametime.frameCount > 100 && frametime.medianMs > 0 && frametime.medianMs < 4 && frametime.cv < 0.2) {
+    flags.push({
+      id: "timewarp",
+      severity: "high",
+      title: "Possible timewarp",
+      detail: `Median frame time ${frametime.medianMs.toFixed(1)}ms and very regular — implausibly fast.`,
+    });
   }
 
   // Unstable rate: suspiciously low (too consistent).
   if (offsets.length >= 20) {
     const ur = unstableRate(offsets);
-    if (ur > 0 && ur < 40) {
+    if (ur > 0 && ur < 35) {
       flags.push({
         id: "low-ur",
         severity: "high",
         title: "Extremely low unstable rate",
-        detail: `UR ${ur.toFixed(1)} — unusually consistent (can hint at relax; strong players can also be consistent).`,
+        detail: `UR ${ur.toFixed(1)} — implausibly consistent (strong relax/bot hint).`,
       });
-    } else if (ur < 55) {
+    } else if (ur < 45) {
       flags.push({
         id: "low-ur",
         severity: "medium",
-        title: "Very low unstable rate",
-        detail: `UR ${ur.toFixed(1)} — quite consistent.`,
+        title: "Very low unstable rate — possible cheat",
+        detail: `UR ${ur.toFixed(1)} — unusually consistent; worth a closer look.`,
       });
     }
   }
 
-  // Key holds: near-identical durations (auto-clicker / bot signature).
+  // Near-zero hold times: humans release in ~20-30ms min; ~0ms = input sent/released same frame
+  // (common bug in ESP32-based hardware "tap assist" cheats).
   if (holdDurations.length >= 20) {
-    const m = mean(holdDurations);
-    const cv = m > 0 ? standardDeviation(holdDurations) / m : 0;
-    const dom = dominantRatio(holdDurations, 3);
+    const nearZero = holdDurations.filter((d) => d <= 5).length / holdDurations.length;
+    if (nearZero > 0.1) {
+      flags.push({
+        id: "zero-hold",
+        severity: "high",
+        title: "Near-zero key hold times",
+        detail: `${Math.round(nearZero * 100)}% of holds are ~0ms — impossible for a human (hardware-cheat signature).`,
+      });
+    }
+  }
+
+  // Uniform key holds, checked PER KEY (a bot/macro may lock only one finger to a fixed value).
+  const checkUniform = (vals: number[], label: string) => {
+    if (vals.length < 20) return;
+    const m = mean(vals);
+    const cv = m > 0 ? standardDeviation(vals) / m : 0;
+    const dom = dominantRatio(vals, 3);
     if (cv < 0.08 || dom > 0.8) {
       flags.push({
-        id: "uniform-holds",
+        id: `uniform-${label}`,
         severity: "high",
-        title: "Near-identical key holds",
-        detail: `Key-hold durations are extremely uniform (can hint at an auto-clicker/bot).`,
+        title: `Near-identical ${label} key holds`,
+        detail: `${label} holds are extremely uniform (dominant bin ${Math.round(dom * 100)}%, cv ${cv.toFixed(
+          2,
+        )}) — auto-clicker/bot hint.`,
       });
     } else if (cv < 0.15 || dom > 0.6) {
       flags.push({
-        id: "uniform-holds",
+        id: `uniform-${label}`,
         severity: "medium",
-        title: "Very uniform key holds",
-        detail: `Key-hold durations are quite uniform.`,
+        title: `Very uniform ${label} key holds`,
+        detail: `${label} holds are quite uniform (dominant bin ${Math.round(dom * 100)}%).`,
       });
     }
-  }
+  };
+  checkUniform(leftHolds, "left");
+  checkUniform(rightHolds, "right");
 
   // Cursor snaps.
-  if (snaps.length > 80) {
+  if (snaps.length > 150) {
     flags.push({ id: "snaps", severity: "high", title: "Many cursor snaps", detail: `${snaps.length} sharp reversals.` });
-  } else if (snaps.length > 30) {
+  } else if (snaps.length > 60) {
     flags.push({
       id: "snaps",
       severity: "medium",
@@ -350,14 +381,14 @@ export function computeCheatFlags(input: FlagInput): Flag[] {
   }
 
   // Impossibly fast cursor.
-  if (maxCursorSpeed > 20) {
+  if (maxCursorSpeed > 40) {
     flags.push({
       id: "cursor-speed",
       severity: "high",
       title: "Impossibly fast cursor",
       detail: `Peak cursor speed ${maxCursorSpeed.toFixed(1)} px/ms.`,
     });
-  } else if (maxCursorSpeed > 12) {
+  } else if (maxCursorSpeed > 25) {
     flags.push({
       id: "cursor-speed",
       severity: "medium",

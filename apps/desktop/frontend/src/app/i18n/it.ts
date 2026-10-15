@@ -285,6 +285,7 @@ export const it: Record<TranslationKey, string> = {
   "ev.includeAudio": "Includi audio (musica + hitsound)",
   "ev.rendering": "Rendering dei frame… {pct}%",
   "ev.encoding": "Codifica MP4…",
+  "ev.encoderLine": "Encoder: {encoder} · {time} · {fps} fps",
   "ev.visual": "A schermo",
   "ev.cursor": "Cursore",
   "ev.trail": "Scia del cursore",

@@ -282,6 +282,7 @@ export const en = {
   "ev.includeAudio": "Include audio (music + hitsounds)",
   "ev.rendering": "Rendering frames… {pct}%",
   "ev.encoding": "Encoding MP4…",
+  "ev.encoderLine": "Encoder: {encoder} · {time} · {fps} fps",
   "ev.visual": "On screen",
   "ev.cursor": "Cursor",
   "ev.trail": "Cursor trail",

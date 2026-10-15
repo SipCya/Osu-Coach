@@ -37,6 +37,26 @@ const PINK_SWITCH = {
 };
 const BAR = { "& .MuiLinearProgress-bar": { backgroundColor: ACCENT } };
 
+function encoderLabel(enc?: string): string {
+  switch (enc) {
+    case "h264_nvenc":
+      return "NVENC (NVIDIA GPU)";
+    case "h264_amf":
+      return "AMF (AMD GPU)";
+    case "h264_qsv":
+      return "QSV (Intel GPU)";
+    case "libx264":
+      return "CPU (x264)";
+    default:
+      return enc ?? "";
+  }
+}
+
+function fmtTime(ms?: number): string {
+  const s = Math.round((ms ?? 0) / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 function Opt({
   label,
   checked,
@@ -268,6 +288,13 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
               {t("ev.rendering", { pct: Math.round(progress.value * 100) })}
             </Typography>
             <LinearProgress variant={"determinate"} value={progress.value * 100} sx={BAR} />
+            <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", mt: 0.5 }}>
+              {t("ev.encoderLine", {
+                encoder: encoderLabel(progress.encoder),
+                time: fmtTime(progress.elapsedMs),
+                fps: Math.round(progress.fps ?? 0),
+              })}
+            </Typography>
           </Box>
         )}
         {progress.phase === "encoding" && (
@@ -276,6 +303,9 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
               {t("ev.encoding")}
             </Typography>
             <LinearProgress sx={BAR} />
+            <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", mt: 0.5 }}>
+              {encoderLabel(progress.encoder)}
+            </Typography>
           </Box>
         )}
         {progress.phase === "done" && (
@@ -291,6 +321,11 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             }
           >
             {t("ev.done")}
+            {progress.encoder && (
+              <Typography variant={"caption"} sx={{ display: "block" }}>
+                {encoderLabel(progress.encoder)} · {fmtTime(progress.elapsedMs)}
+              </Typography>
+            )}
           </Alert>
         )}
         {progress.phase === "error" && (

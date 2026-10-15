@@ -70,6 +70,9 @@ export interface ExportProgress {
   value: number;
   file?: string;
   message?: string;
+  encoder?: string;
+  fps?: number;
+  elapsedMs?: number;
 }
 
 export interface VideoExportOptions {
@@ -263,7 +266,8 @@ export class VideoExporter {
       });
       started = true;
 
-      this.exportProgress$.next({ phase: "rendering", value: 0 });
+      const renderStart = performance.now();
+      this.exportProgress$.next({ phase: "rendering", value: 0, encoder });
       for (let i = 0; i <= total; i++) {
         const t = startMs + (i / sourceFps) * 1000;
         this.gameClock.seekTo(t);
@@ -276,14 +280,24 @@ export class VideoExporter {
         if (!ctx) throw new Error("Could not read the rendered frame");
         const data = ctx.getImageData(0, 0, width, height).data;
         await ipcRenderer.invoke("videoExportFrame", Buffer.from(data.buffer, data.byteOffset, data.byteLength));
-        if (i % 4 === 0) this.exportProgress$.next({ phase: "rendering", value: i / total });
+        if (i % 4 === 0) {
+          const elapsedMs = performance.now() - renderStart;
+          const fps = elapsedMs > 0 ? (i + 1) / (elapsedMs / 1000) : 0;
+          this.exportProgress$.next({ phase: "rendering", value: i / total, encoder, fps, elapsedMs });
+        }
       }
 
       blackBackdrop.destroy();
-      this.exportProgress$.next({ phase: "encoding", value: 1 });
+      this.exportProgress$.next({ phase: "encoding", value: 1, encoder });
       await ipcRenderer.invoke("videoExportFinish");
       started = false;
-      this.exportProgress$.next({ phase: "done", value: 1, file: output });
+      this.exportProgress$.next({
+        phase: "done",
+        value: 1,
+        file: output,
+        encoder,
+        elapsedMs: performance.now() - renderStart,
+      });
     } catch (e) {
       if (started) await ipcRenderer.invoke("videoExportCancel").catch(() => undefined);
       const message = (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
