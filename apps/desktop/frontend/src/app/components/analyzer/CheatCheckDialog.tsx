@@ -106,6 +106,8 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
       meanError: meanOf(reports.offsets),
       offsets: reports.offsets,
       holdDurations: reports.holdDurations,
+      leftHolds: reports.leftHolds,
+      rightHolds: reports.rightHolds,
       frametime: reports.frametime,
       snaps: reports.snaps.snaps,
       maxCursorSpeed: reports.maxSpeed,
@@ -135,7 +137,7 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
       snaps: snaps.snaps,
       maxCursorSpeed: maxSpeed,
     });
-    return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, maxSpeed, flags };
+    return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, leftHolds: left, rightHolds: right, maxSpeed, flags };
   }, [replay, analyzer]);
 
   const compare = async () => {

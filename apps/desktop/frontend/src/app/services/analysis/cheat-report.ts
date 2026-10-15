@@ -200,7 +200,10 @@ export function buildCheatReportHtml(data: CheatReportData): string {
   // Key-hold duration histogram (fine bins, ~40 bars like osu! hold-time distributions).
   const holdMax = Math.max(50, ...data.holdDurations);
   const holdBin = Math.max(3, Math.ceil(holdMax / 45));
-  const holdBins = histogram(data.holdDurations, holdBin, 0, Math.ceil(holdMax / holdBin) * holdBin);
+  const holdTop = Math.ceil(holdMax / holdBin) * holdBin;
+  const holdBins = histogram(data.holdDurations, holdBin, 0, holdTop);
+  const leftBins = histogram(data.leftHolds, holdBin, 0, holdTop);
+  const rightBins = histogram(data.rightHolds, holdBin, 0, holdTop);
   const holdMean = data.holdDurations.length
     ? data.holdDurations.reduce((a, b) => a + b, 0) / data.holdDurations.length
     : NaN;
@@ -273,6 +276,10 @@ export function buildCheatReportHtml(data: CheatReportData): string {
   .flag { background: #1e1e27; border: 1px solid #2c2c38; border-left: 4px solid #ff5c5c; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
   .flag.ok { border-left-color: #4caf50; color: #9fdca3; }
   .verdict { display: inline-block; color: #15151b; font-weight: 800; padding: 5px 14px; border-radius: 8px; margin-bottom: 10px; }
+  .toggle { background: #2a2a36; color: #ececf2; border: 1px solid #3a3a46; border-radius: 6px; padding: 4px 10px; font-size: 0.82rem; cursor: pointer; margin: 2px 0 6px; }
+  .toggle:hover { background: #343442; }
+  .legend { font-size: 0.82rem; color: #b8b8c6; margin-top: 4px; }
+  .legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin: 0 5px 0 12px; vertical-align: middle; }
   .flagdetail { color: #b8b8c6; font-size: 0.86rem; margin-top: 3px; }
   .muted { color: #8a8a99; }
   table { width: 100%; border-collapse: collapse; margin-top: 6px; }
@@ -311,15 +318,22 @@ export function buildCheatReportHtml(data: CheatReportData): string {
     `How early (left, −) or late (right, +) each hit was. A healthy play is a bell shape with some spread. An extremely narrow, perfectly centered distribution (very low unstable rate) can hint at relax/auto-tap, but strong legit players can also be very consistent.`,
   )}
 
-  ${section(
-    "Key-hold duration per circle",
-    barChart(holdBins, {
+  <section>
+    <h2>Key-hold duration per circle</h2>
+    <button class="toggle" onclick="toggleHold(this)">Separate keys</button>
+    <div id="holdCombined">${barChart(holdBins, {
       mean: holdMean,
       unit: "ms",
       suspect: holdDomSuspect ? (b) => b.count === holdDomCount : undefined,
-    }),
-    `How long the key stayed held for each hit circle (${data.holdDurations.length} measured). Humans vary; a spike of near-identical durations can hint at an auto-clicker or bot.`,
-  )}
+    })}</div>
+    <div id="holdSeparated" style="display:none">
+      ${barChartDual(leftBins, rightBins, "ms")}
+      <div class="legend"><span class="sw" style="background:${LEFT_COLOR}"></span>Left key<span class="sw" style="background:${RIGHT_COLOR}"></span>Right key</div>
+    </div>
+    <p class="explain">How long the key stayed held for each hit circle (${
+      data.holdDurations.length
+    } measured). Humans vary; a spike of near-identical durations can hint at an auto-clicker or bot. Toggle <b>Separate keys</b> to compare left vs right — a cheat often locks one finger to a near-fixed value (a vertical line of one colour).</p>
+  </section>
 
   <section><h2>Cursor snaps</h2>${snapRows}<p class="explain">Sharp cursor reversals (near-180° flicks over a large distance). A few can be legit flicks; many clustered ones can hint at aim assist. Max cursor speed: ${data.maxCursorSpeed.toFixed(
     2,
@@ -329,6 +343,14 @@ export function buildCheatReportHtml(data: CheatReportData): string {
 </div>
 <div id="tip"></div>
 <script>
+  function toggleHold(btn) {
+    var c = document.getElementById('holdCombined');
+    var s = document.getElementById('holdSeparated');
+    var sep = s.style.display === 'none';
+    s.style.display = sep ? 'block' : 'none';
+    c.style.display = sep ? 'none' : 'block';
+    btn.textContent = sep ? 'Combined' : 'Separate keys';
+  }
   (function () {
     var tip = document.getElementById('tip');
     document.querySelectorAll('.bar').forEach(function (el) {
