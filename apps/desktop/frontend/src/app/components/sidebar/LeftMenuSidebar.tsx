@@ -110,12 +110,12 @@ export function LeftMenuSidebar() {
       alignItems={"center"}
       component={"nav"}
     >
-      <Box onClick={handleLinkClick("home")} sx={{ cursor: "pointer" }}>
+      <Box onClick={handleLinkClick("/app/home")} sx={{ cursor: "pointer" }}>
         <AppLogo />
       </Box>
       <Divider orientation={"horizontal"} sx={{ borderWidth: 1, width: "80%" }} />
       <Tooltip title={t("sidebar.overview")} placement={"right"}>
-        <Link to={"home"}>
+        <Link to={"/app/home"}>
           <IconButton color={buttonColor("/home")}>
             <Home />
           </IconButton>

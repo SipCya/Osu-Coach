@@ -171,7 +171,10 @@ type TabKey = (typeof TAB_ORDER)[number];
 const ACTIVE_ONLY = new Set<TabKey>(["analyzer", "practice", "home"]);
 
 function activeTab(pathname: string): TabKey {
-  return TAB_ORDER.find((k) => pathname.includes(k)) ?? "analyzer";
+  // The segment right after /app/ — not a substring match, so "/app/.../analyzer" style
+  // paths can't shadow another tab.
+  const seg = pathname.split("/app/")[1]?.split("/")[0] ?? "";
+  return (TAB_ORDER as readonly string[]).includes(seg) ? (seg as TabKey) : "analyzer";
 }
 
 const SCREENS: Record<TabKey, ReactNode> = {
