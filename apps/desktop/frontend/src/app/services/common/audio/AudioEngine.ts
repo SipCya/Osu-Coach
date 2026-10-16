@@ -70,7 +70,17 @@ export class AudioEngine {
 
   start() {
     this.audioContext.resume();
-    this.song?.mediaElement.play();
+    if (this.song) {
+      // Re-align the song to the master clock on every (re)start. audio.play() has a
+      // small startup latency, so without this the song drifts behind the clock a little
+      // on each pause/resume and the error accumulates. Only correct a real gap to avoid
+      // a needless micro-seek (which can click) when we are already in sync.
+      const driftMs = this.song.mediaElement.currentTime * 1000 - this.gameClock.timeElapsedInMs;
+      if (Math.abs(driftMs) > 15) {
+        this.song.mediaElement.currentTime = this.gameClock.timeElapsedInMs / 1000;
+      }
+      void this.song.mediaElement.play();
+    }
   }
 
   pause() {
