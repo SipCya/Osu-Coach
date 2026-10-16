@@ -41,8 +41,9 @@ const MOD_ICON_FILE: Record<string, string> = {
   SUDDEN_DEATH: "suddendeath",
   PERFECT: "perfect",
 };
-const MOD_ICON_HEIGHT = 50;
-const MOD_ICON_STEP = 42;
+const MOD_ICON_HEIGHT = 100;
+const MOD_ICON_STEP = 84;
+const MOD_ICON_GAP = 16; // vertical gap below the accuracy counter
 
 function calculateUnstableRate(x: number[]) {
   return x.length === 0 ? 0 : standardDeviation(x) * 10;
@@ -60,6 +61,9 @@ export class ForegroundHUDPreparer {
   urText: Text;
   modIcons: Container;
   private modIconsKey = "";
+  private modIconsWidth = 0;
+  /** Bottom edge of the accuracy counter in stage coords; mods are placed just below it. */
+  private accBottom = 70;
 
   /** When false, the debug stats text is hidden (used for a clean osu!-like video export). */
   showStats = true;
@@ -119,8 +123,7 @@ export class ForegroundHUDPreparer {
       sprite.position.set(MOD_ICON_HEIGHT / 2 + i * MOD_ICON_STEP, MOD_ICON_HEIGHT / 2);
       this.modIcons.addChild(sprite);
     });
-    const width = resolved.length ? (resolved.length - 1) * MOD_ICON_STEP + MOD_ICON_HEIGHT : 0;
-    this.modIcons.position.set(STAGE_WIDTH - 15 - width, 48);
+    this.modIconsWidth = resolved.length ? (resolved.length - 1) * MOD_ICON_STEP + MOD_ICON_HEIGHT : 0;
   }
 
   updateOverlays() {
@@ -135,6 +138,8 @@ export class ForegroundHUDPreparer {
       const mods = this.beatmapManager.getBeatmap()?.appliedMods ?? [];
       if (mods.length > 0) {
         this.buildModIcons(mods);
+        // Right-aligned, just below the accuracy counter so they read at the same scale.
+        this.modIcons.position.set(STAGE_WIDTH - 15 - this.modIconsWidth, this.accBottom + MOD_ICON_GAP);
         this.container.addChild(this.modIcons);
       }
     }
@@ -205,6 +210,7 @@ export class ForegroundHUDPreparer {
       const overlap = skin.config.fonts.scoreOverlap;
       accNumber.prepare({ accuracy: gameplayInfo.accuracy, digitTextures, dotTexture, percentageTexture, overlap });
       accNumber.container.position.set(STAGE_WIDTH - 15, 25);
+      this.accBottom = 25 + accNumber.container.height;
       this.container.addChild(accNumber.container);
     }
   }
