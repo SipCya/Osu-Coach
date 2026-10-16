@@ -41,6 +41,7 @@ import { tosuWatcher } from "../../services/speed-changer/tosu";
 import { frontendAPI } from "../../api";
 import { useAnalysisApp } from "../../providers/TheaterProvider";
 import { useGameClock, useGameClockControls, useGameClockTime } from "../../hooks/game-clock";
+import { usePersistentState } from "../../hooks/usePersistentState";
 import { useAudioSettings, useAudioSettingsService } from "../../hooks/audio";
 import { VolumeSlider } from "../../components/analyzer/BaseAudioSettingsPanel";
 import {
@@ -270,17 +271,27 @@ export function MapPractice() {
   const status = useObservable(() => tosuWatcher.status$, tosuWatcher.status$.getValue());
   const gameMap = useObservable(() => tosuWatcher.map$, tosuWatcher.map$.getValue());
 
-  const [followGame, setFollowGame] = useState(true);
-  const [manualPath, setManualPath] = useState<string | null>(null);
+  // User-controlled state persists across tab switches (this screen unmounts when hidden
+  // because it shares the Analyzer's PIXI renderer). Difficulties/folder are reloaded from
+  // disk on each mount; loadedSource guards the load effect from clobbering restored segments.
+  const [followGame, setFollowGame] = usePersistentState("mp.followGame", true);
+  const [manualPath, setManualPath] = usePersistentState<string | null>("mp.manualPath", null);
   const [folder, setFolder] = useState<string | null>(null);
   const [difficulties, setDifficulties] = useState<DifficultyFile[]>([]);
-  const [basePath, setBasePath] = useState<string | null>(null);
-  const [segments, setSegments] = useState<Segment[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [trimAudio, setTrimAudio] = useState(true);
-  const [name, setName] = useState("");
+  const [basePath, setBasePath] = usePersistentState<string | null>("mp.basePath", null);
+  const [segments, setSegments] = usePersistentState<Segment[]>("mp.segments", []);
+  const [activeId, setActiveId] = usePersistentState<string | null>("mp.activeId", null);
+  const [trimAudio, setTrimAudio] = usePersistentState("mp.trimAudio", true);
+  const [name, setName] = usePersistentState("mp.name", "");
+  const [loadedSource, setLoadedSource] = usePersistentState<string | null>("mp.loadedSource", null);
   const [job, setJob] = useState<Job>({ state: "idle" });
   const [readError, setReadError] = useState<string | null>(null);
+
+  // Read current values inside the load effect without making them effect dependencies.
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  const loadedSourceRef = useRef(loadedSource);
+  loadedSourceRef.current = loadedSource;
 
   useEffect(() => {
     tosuWatcher.start();
@@ -313,16 +324,19 @@ export function MapPractice() {
         if (cancelled) return;
         loaded.sort((a, b) => a.info.version.localeCompare(b.info.version));
         const base = loaded.find((d) => d.path.toLowerCase() === sourcePath.toLowerCase()) ?? loaded[0];
+        setFolder(dir);
+        setDifficulties(loaded);
+        setReadError(null);
+        setJob({ state: "idle" });
+        // Same map as before (returning to the tab): keep the segments the user built.
+        if (loadedSourceRef.current === sourcePath && segmentsRef.current.length > 0) return;
         const firstSegment = base
           ? { id: nextId(), difficultyPath: base.path, startMs: base.firstObjectMs, endMs: base.lastObjectMs }
           : null;
-        setFolder(dir);
-        setDifficulties(loaded);
         setBasePath(base?.path ?? null);
         setSegments(firstSegment ? [firstSegment] : []);
         setActiveId(firstSegment?.id ?? null);
-        setReadError(null);
-        setJob({ state: "idle" });
+        setLoadedSource(sourcePath);
       } catch (e) {
         if (!cancelled) {
           setDifficulties([]);

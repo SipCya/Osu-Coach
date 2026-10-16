@@ -1,5 +1,5 @@
 import { useAppDispatch } from "./hooks/redux";
-import { Outlet, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { LeftMenuSidebar } from "./components/sidebar/LeftMenuSidebar";
 import { SplashScreen } from "./screens/splash/SplashScreen";
 import { HomeScreen } from "./screens/home/HomeScreen";
@@ -11,6 +11,7 @@ import {
   ContentCut,
   FlashlightOn,
   GpsFixed,
+  QueueMusic,
   Speed,
 } from "@mui/icons-material";
 import { FaMicroscope } from "react-icons/fa";
@@ -18,7 +19,8 @@ import { SpeedChanger } from "./screens/speed-changer/SpeedChanger";
 import { MapPractice } from "./screens/map-practice/MapPractice";
 import { useTranslation } from "./i18n";
 import { UpdateModal } from "./components/update/UpdateModal";
-import { useEffect } from "react";
+import { ReactNode, useEffect, useRef } from "react";
+import { useAnalysisApp } from "./providers/TheaterProvider";
 import { downloadFinished, downloadProgressed, newVersionAvailable } from "./store/update/slice";
 import { frontendAPI } from "./api";
 import { ipcRenderer } from "electron";
@@ -32,6 +34,7 @@ import { MapCleaner } from "./screens/map-cleaner/MapCleaner";
 import { AimTrainer } from "./screens/trainer/AimTrainer";
 import { SkinManager } from "./screens/skins/SkinManager";
 import { FlashlightScreen } from "./screens/flashlight/FlashlightScreen";
+import { SongsCompilation } from "./screens/songs-compilation/SongsCompilation";
 
 function TopMenu() {
   const { t } = useTranslation();
@@ -51,6 +54,8 @@ function TopMenu() {
     ? "skins"
     : location.pathname.includes("flashlight")
     ? "flashlight"
+    : location.pathname.includes("compilation")
+    ? "compilation"
     : location.pathname.includes("analyzer")
     ? "analyzer"
     : false;
@@ -134,7 +139,85 @@ function TopMenu() {
         onFocus={(e: React.FocusEvent<HTMLElement>) => e.currentTarget.blur()}
         sx={tabSx}
       />
+      <Tab
+        value={"compilation"}
+        icon={<QueueMusic />}
+        iconPosition={"start"}
+        label={t("nav.compilation")}
+        onFocus={(e: React.FocusEvent<HTMLElement>) => e.currentTarget.blur()}
+        sx={tabSx}
+      />
     </Tabs>
+  );
+}
+
+// Tabs are kept mounted while hidden so each screen's state survives switching tabs.
+// Exceptions mount only while active: the Analyzer and Map Practice share the single
+// PIXI renderer / scenario singleton (keeping both alive would fight over it), and the
+// Analyzer's replay persists through the services anyway.
+const TAB_ORDER = [
+  "analyzer",
+  "speed-changer",
+  "practice",
+  "collections",
+  "cleaner",
+  "trainer",
+  "skins",
+  "flashlight",
+  "compilation",
+  "home",
+] as const;
+type TabKey = (typeof TAB_ORDER)[number];
+const ACTIVE_ONLY = new Set<TabKey>(["analyzer", "practice", "home"]);
+
+function activeTab(pathname: string): TabKey {
+  return TAB_ORDER.find((k) => pathname.includes(k)) ?? "analyzer";
+}
+
+const SCREENS: Record<TabKey, ReactNode> = {
+  analyzer: <Analyzer />,
+  "speed-changer": <SpeedChanger />,
+  practice: <MapPractice />,
+  collections: <CollectionManagerScreen />,
+  cleaner: <MapCleaner />,
+  trainer: <AimTrainer />,
+  skins: <SkinManager />,
+  flashlight: <FlashlightScreen />,
+  compilation: <SongsCompilation />,
+  home: <HomeScreen />,
+};
+
+function KeepAliveOutlet() {
+  const location = useLocation();
+  const analyzer = useAnalysisApp();
+  const active = activeTab(location.pathname);
+  const visited = useRef<Set<TabKey>>(new Set());
+  visited.current.add(active);
+
+  // Stop any playback when leaving a tab so audio never keeps going in the background.
+  useEffect(() => {
+    analyzer.gameClock.pause();
+  }, [active, analyzer]);
+
+  return (
+    <>
+      {TAB_ORDER.map((key) => {
+        const isActive = key === active;
+        if (ACTIVE_ONLY.has(key)) {
+          return isActive ? (
+            <Box key={key} sx={{ height: "100%" }}>
+              {SCREENS[key]}
+            </Box>
+          ) : null;
+        }
+        if (!visited.current.has(key)) return null;
+        return (
+          <Box key={key} sx={{ height: "100%", display: isActive ? "block" : "none" }}>
+            {SCREENS[key]}
+          </Box>
+        );
+      })}
+    </>
   );
 }
 
@@ -147,7 +230,7 @@ function NormalView() {
         <Stack sx={{ flexGrow: 1, height: "100%", minWidth: 0 }}>
           <TopMenu />
           <Box sx={{ flex: 1, minHeight: 0 }}>
-            <Outlet />
+            <KeepAliveOutlet />
           </Box>
         </Stack>
         <UpdateModal />
@@ -200,17 +283,7 @@ export function OsuCoachApp() {
     <Routes>
       <Route index element={<SplashScreen />} />
       <Route path={"setup"} element={<SetupScreen />} />
-      <Route path={"app"} element={<NormalView />}>
-        <Route path={"home"} element={<HomeScreen />} />
-        <Route path={"analyzer"} element={<Analyzer />} />
-        <Route path={"speed-changer"} element={<SpeedChanger />} />
-        <Route path={"practice"} element={<MapPractice />} />
-        <Route path={"collections"} element={<CollectionManagerScreen />} />
-        <Route path={"cleaner"} element={<MapCleaner />} />
-        <Route path={"trainer"} element={<AimTrainer />} />
-        <Route path={"skins"} element={<SkinManager />} />
-        <Route path={"flashlight"} element={<FlashlightScreen />} />
-      </Route>
+      <Route path={"app/*"} element={<NormalView />} />
     </Routes>
   );
 }
