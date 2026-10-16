@@ -24,6 +24,7 @@ import { AnalysisCursorSettingsStore } from "./analysis-cursor";
 import { ModSettingsService } from "./mod-settings";
 
 const START_LEAD_IN_MS = 2000;
+const OUTRO_TAIL_MS = 1500; // kept after the last object when trimming the outro
 
 /** Encodes an AudioBuffer to 16-bit PCM WAV bytes. */
 function audioBufferToWav(buffer: AudioBuffer): Uint8Array {
@@ -84,6 +85,7 @@ export interface VideoExportOptions {
   // Audio & timing
   includeAudio: boolean; // mux the song + hitsounds
   startAtFirstObject: boolean; // skip the empty intro before the first circle
+  trimOutro: boolean; // cut shortly after the last object instead of the full replay tail
   // Visuals — all independent from the Reviewer's live settings
   backgroundDim: number; // 0..1
   backgroundBlur: number; // 0..1
@@ -144,6 +146,16 @@ export class VideoExporter {
     return Number.isFinite(min) ? min : 0;
   }
 
+  private lastObjectMs(): number {
+    const beatmap = this.beatmapManager.getBeatmap();
+    let max = 0;
+    for (const o of beatmap.hitObjects as { hitTime?: number; startTime?: number; endTime?: number }[]) {
+      const e = o.endTime ?? o.hitTime ?? o.startTime;
+      if (typeof e === "number" && Number.isFinite(e)) max = Math.max(max, e);
+    }
+    return max;
+  }
+
   private audioPath(): string | undefined {
     const src = this.audioEngine.song?.mediaElement.src;
     if (!src) return undefined;
@@ -179,7 +191,13 @@ export class VideoExporter {
     const blurFactor = Math.max(1, Math.floor(options.blurFactor || 1));
     const sourceFps = outputFps * blurFactor;
     const startMs = options.startAtFirstObject ? Math.max(0, this.firstObjectMs() - START_LEAD_IN_MS) : 0;
-    const total = Math.max(1, Math.ceil(((durationMs - startMs) / 1000) * sourceFps));
+    // Play the export at the replay's own speed (DT/HT), so video + audio both follow it.
+    const rate = this.beatmapManager.getBeatmap()?.gameClockRate ?? 1;
+    const endMs = options.trimOutro
+      ? Math.min(durationMs, this.lastObjectMs() + OUTRO_TAIL_MS)
+      : durationMs;
+    // One source frame advances song-time by rate × (1/sourceFps)s, so the clip runs at `rate`.
+    const total = Math.max(1, Math.ceil(((endMs - startMs) / 1000) * (sourceFps / rate)));
 
     const prevW = renderer.screen.width;
     const prevH = renderer.screen.height;
@@ -239,7 +257,7 @@ export class VideoExporter {
       if (options.includeAudio) {
         const song = this.audioPath();
         if (song) {
-          const mix = await this.hitsoundPlayer.renderMixdown(song, durationMs, startMs);
+          const mix = await this.hitsoundPlayer.renderMixdown(song, endMs, startMs);
           if (mix) {
             wavTemp = join(tmpdir(), `osucoach-audio-${Date.now()}.wav`);
             await writeFile(wavTemp, Buffer.from(audioBufferToWav(mix)));
@@ -261,7 +279,7 @@ export class VideoExporter {
         crf: 20,
         encoder,
         audioPath,
-        audioTempo: 1,
+        audioTempo: rate,
         output,
       });
       started = true;
@@ -269,7 +287,7 @@ export class VideoExporter {
       const renderStart = performance.now();
       this.exportProgress$.next({ phase: "rendering", value: 0, encoder });
       for (let i = 0; i <= total; i++) {
-        const t = startMs + (i / sourceFps) * 1000;
+        const t = Math.min(endMs, startMs + (i / sourceFps) * 1000 * rate);
         this.gameClock.seekTo(t);
         this.gameSimulator.simulate(t);
         this.analysisStage.updateAnalysisStage();

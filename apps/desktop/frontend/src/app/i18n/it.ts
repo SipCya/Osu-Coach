@@ -298,6 +298,7 @@ export const it: Record<TranslationKey, string> = {
   "ev.encoding": "Codifica MP4…",
   "ev.encoderLine": "Encoder: {encoder} · {time} · {fps} fps",
   "ev.timeLeft": "~{time} rimanenti",
+  "ev.trimOutro": "Taglia l'outro (finisci dopo l'ultimo oggetto)",
   "ev.visual": "A schermo",
   "ev.cursor": "Cursore",
   "ev.trail": "Scia del cursore",

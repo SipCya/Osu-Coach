@@ -295,6 +295,7 @@ export const en = {
   "ev.encoding": "Encoding MP4…",
   "ev.encoderLine": "Encoder: {encoder} · {time} · {fps} fps",
   "ev.timeLeft": "~{time} left",
+  "ev.trimOutro": "Trim outro (end after the last object)",
   "ev.visual": "On screen",
   "ev.cursor": "Cursor",
   "ev.trail": "Cursor trail",

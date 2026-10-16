@@ -108,6 +108,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
   // Audio & timing
   const [includeAudio, setIncludeAudio] = useState(true);
   const [startAtFirstObject, setStartAtFirstObject] = useState(true);
+  const [trimOutro, setTrimOutro] = useState(true);
   // Visuals (independent from the Reviewer)
   const [backgroundDim, setBackgroundDim] = useState(80);
   const [backgroundBlur, setBackgroundBlur] = useState(0);
@@ -144,6 +145,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
       blurFactor,
       includeAudio,
       startAtFirstObject,
+      trimOutro,
       backgroundDim: backgroundDim / 100,
       backgroundBlur: backgroundBlur / 100,
       showCursor,
@@ -269,6 +271,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
           <Opt label={t("ev.applyReplayMods")} checked={applyReplayMods} onChange={setApplyReplayMods} disabled={busy} />
           <Opt label={t("ev.includeAudio")} checked={includeAudio} onChange={setIncludeAudio} disabled={busy} />
           <Opt label={t("ev.startAtFirstObject")} checked={startAtFirstObject} onChange={setStartAtFirstObject} disabled={busy} />
+          <Opt label={t("ev.trimOutro")} checked={trimOutro} onChange={setTrimOutro} disabled={busy} />
         </Box>
 
         {sectionTitle(t("ev.overlays"))}
