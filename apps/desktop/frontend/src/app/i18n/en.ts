@@ -110,6 +110,7 @@ export const en = {
   "coach.late": "late",
   "coach.early": "early",
   "coach.noTiming": "No timed hits in this replay.",
+  "coach.groupByType": "Group by type",
 
   "dialog.whatHappened": "What happened",
   "dialog.clickTiming": "Click timing",

@@ -112,6 +112,7 @@ export const it: Record<TranslationKey, string> = {
   "coach.late": "in ritardo",
   "coach.early": "in anticipo",
   "coach.noTiming": "Nessun hit cronometrato in questo replay.",
+  "coach.groupByType": "Raggruppa per tipo",
 
   "dialog.whatHappened": "Cosa è successo",
   "dialog.clickTiming": "Timing del click",
