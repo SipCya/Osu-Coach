@@ -115,11 +115,41 @@ interface Context {
   usedPress: Map<number, string>;
 }
 
+export type Judgement = 300 | 100 | 50;
+
+export interface HitTiming {
+  hitObjectId: string;
+  time: number; // the object's hit time (where to seek)
+  errorMs: number; // judgementTime - hitTime (+ = late)
+  judgement: Judgement;
+  comboIndex: number;
+}
+
+export interface TimingAnalysis {
+  hits: HitTiming[]; // every non-miss circle, in time order
+  ur: number; // unstable rate = stddev(errors) * 10
+  meanErrorMs: number; // average signed error (+ = late)
+  suggestedOffsetMs: number; // osu! offset that centres the timing (= mean; late → positive)
+  counts: { great: number; ok: number; meh: number };
+}
+
+/** UR / mean error / suggested offset from a list of signed hit errors (ms). */
+export function timingStats(errorsMs: number[]): Pick<TimingAnalysis, "ur" | "meanErrorMs" | "suggestedOffsetMs"> {
+  const n = errorsMs.length;
+  if (n === 0) return { ur: 0, meanErrorMs: 0, suggestedOffsetMs: 0 };
+  const mean = errorsMs.reduce((a, b) => a + b, 0) / n;
+  const variance = errorsMs.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const ur = Math.sqrt(variance) * 10;
+  // osu! convention: hitting late (positive mean) → raise the offset (positive).
+  return { ur, meanErrorMs: mean, suggestedOffsetMs: mean };
+}
+
 export interface CoachAnalysis {
   mistakes: Mistake[];
   presses: Press[];
   cursor: CursorTrack;
   windows: Context["windows"];
+  timing: TimingAnalysis;
 }
 
 export function analyseMistakes(beatmap: Beatmap, frames: ReplayFrame[], state: GameState): CoachAnalysis {
@@ -135,6 +165,7 @@ export function analyseMistakes(beatmap: Beatmap, frames: ReplayFrame[], state: 
 
   const order = beatmap.hitObjects.filter((h) => isHitCircle(h) || isSlider(h)) as (HitCircle | Slider)[];
   const mistakes: Mistake[] = [];
+  const hits: HitTiming[] = [];
 
   order.forEach((obj, i) => {
     const previous = i > 0 ? order[i - 1] : undefined;
@@ -144,6 +175,13 @@ export function analyseMistakes(beatmap: Beatmap, frames: ReplayFrame[], state: 
       mistakes.push(explainMiss(ctx, obj, head, previous, verdict.missReason));
       return;
     }
+    // Non-miss circle head: record its timing error and 300/100/50 judgement.
+    if (verdict) {
+      const errorMs = verdict.judgementTime - head.hitTime;
+      const absE = Math.abs(errorMs);
+      const judgement: Judgement = absE <= great ? 300 : absE <= ok ? 100 : 50;
+      hits.push({ hitObjectId: obj.id, time: head.hitTime, errorMs, judgement, comboIndex: head.withinComboSetIndex + 1 });
+    }
     if (isSlider(obj)) {
       const broken = obj.checkPoints.find(
         (c) => c.type !== "LAST_LEGACY_TICK" && state.checkPointVerdict[c.id] && !state.checkPointVerdict[c.id].hit,
@@ -152,7 +190,13 @@ export function analyseMistakes(beatmap: Beatmap, frames: ReplayFrame[], state: 
     }
   });
   mistakes.sort((a, b) => a.time - b.time);
-  return { mistakes, presses, cursor, windows: ctx.windows };
+  hits.sort((a, b) => a.time - b.time);
+
+  const counts = { great: 0, ok: 0, meh: 0 };
+  for (const h of hits) counts[h.judgement === 300 ? "great" : h.judgement === 100 ? "ok" : "meh"]++;
+  const timing: TimingAnalysis = { hits, counts, ...timingStats(hits.map((h) => h.errorMs)) };
+
+  return { mistakes, presses, cursor, windows: ctx.windows, timing };
 }
 
 function aimDetails(obj: HitCircle, previous: HitCircle | Slider | undefined, point: Position) {
