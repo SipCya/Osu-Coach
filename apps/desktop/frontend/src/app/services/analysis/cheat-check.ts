@@ -98,6 +98,23 @@ export function maxCursorSpeed(frames: ReplayFrame[]): number {
 }
 
 /**
+ * Number of consecutive-frame segments whose cursor speed exceeds `maxPxPerMs`.
+ * A fast human flick, coarsely sampled, spikes a handful of times; an aimbot teleports
+ * on many objects. So a HIGH COUNT is the real signal — a single spike is legit, which
+ * is why the flag counts segments instead of looking at the peak speed alone.
+ */
+export function fastCursorSegments(frames: ReplayFrame[], maxPxPerMs = 50): number {
+  let count = 0;
+  for (let i = 1; i < frames.length; i++) {
+    const dt = frames[i].time - frames[i - 1].time;
+    if (dt <= 0) continue;
+    const d = Math.hypot(frames[i].position.x - frames[i - 1].position.x, frames[i].position.y - frames[i - 1].position.y);
+    if (d / dt > maxPxPerMs) count++;
+  }
+  return count;
+}
+
+/**
  * How long each key stayed held for the circles that were hit, in ms.
  * Relax/replay-bots tend to produce unnaturally consistent hold durations.
  */
@@ -271,6 +288,7 @@ export interface FlagInput {
   rightHolds: number[];
   snaps: Snap[];
   maxCursorSpeed: number;
+  fastCursorSegments: number;
 }
 
 /** Fraction of the dominant histogram bin (how concentrated the values are). */
@@ -294,7 +312,7 @@ export function fastFrameRatio(frametime: FrametimeReport, thresholdMs = 8): num
  */
 export function computeCheatFlags(input: FlagInput): Flag[] {
   const flags: Flag[] = [];
-  const { frametime, offsets, holdDurations, leftHolds, rightHolds, snaps, maxCursorSpeed } = input;
+  const { frametime, offsets, holdDurations, leftHolds, rightHolds, snaps, maxCursorSpeed, fastCursorSegments } = input;
 
   // Timewarp: only flag physically implausible, very regular, very fast frame times
   // (kept strict because high-refresh monitors legitimately produce low frame times).
@@ -380,20 +398,21 @@ export function computeCheatFlags(input: FlagInput): Flag[] {
     });
   }
 
-  // Impossibly fast cursor.
-  if (maxCursorSpeed > 40) {
+  // Impossibly fast cursor: flag repeated teleport-like moves, not a single sampling
+  // spike from a fast flick (that is legit and used to cause false positives).
+  if (fastCursorSegments >= 30) {
     flags.push({
       id: "cursor-speed",
       severity: "high",
       title: "Impossibly fast cursor",
-      detail: `Peak cursor speed ${maxCursorSpeed.toFixed(1)} px/ms.`,
+      detail: `${fastCursorSegments} segments over 50 px/ms (peak ${maxCursorSpeed.toFixed(1)} px/ms).`,
     });
-  } else if (maxCursorSpeed > 25) {
+  } else if (fastCursorSegments >= 10) {
     flags.push({
       id: "cursor-speed",
       severity: "medium",
       title: "Very fast cursor movement",
-      detail: `Peak cursor speed ${maxCursorSpeed.toFixed(1)} px/ms.`,
+      detail: `${fastCursorSegments} segments over 50 px/ms (peak ${maxCursorSpeed.toFixed(1)} px/ms).`,
     });
   }
 

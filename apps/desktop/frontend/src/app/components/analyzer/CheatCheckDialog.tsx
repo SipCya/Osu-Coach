@@ -30,6 +30,7 @@ import {
   cheatVerdict,
   compareReplays,
   computeCheatFlags,
+  fastCursorSegments,
   keyHoldDurationsByKey,
   maxCursorSpeed,
   meanOf,
@@ -128,6 +129,7 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
     const { left, right } = keyHoldDurationsByKey(replay.frames, hitTimes);
     const holdDurations = [...left, ...right];
     const maxSpeed = maxCursorSpeed(replay.frames);
+    const fastSegments = fastCursorSegments(replay.frames);
     const flags = computeCheatFlags({
       frametime,
       offsets,
@@ -136,6 +138,7 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
       rightHolds: right,
       snaps: snaps.snaps,
       maxCursorSpeed: maxSpeed,
+      fastCursorSegments: fastSegments,
     });
     return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, leftHolds: left, rightHolds: right, maxSpeed, flags };
   }, [replay, analyzer]);

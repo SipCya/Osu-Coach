@@ -13,6 +13,11 @@ test each overlay. i think some of them are gonna be broken or useless anyway
 
 ## ✅ Done (recent)
 
+- **Song Mashup** tab (mp3 mashup only — the map-merge idea was dropped): browse the osu! library (searchable), pick parts of songs on a **waveform** (scrub + preview volume), per-segment **speed** and **fade in/out**, per-join **gap or crossfade**, single-pass ffmpeg engine; live total length + render progress and ETA.
+- **Tab state persistence**: switching tabs no longer resets a screen. Tool tabs are kept mounted (keep-alive, clock paused on switch); Map Practice uses `usePersistentState` (it shares the Analyzer's PIXI renderer so it can't be kept alive).
+- **UR analyzer** (second tab in the coach/Mistakes panel, not a popup): UR, average error, **suggested offset** (= mean, osu! sign), 300/100/50/miss counts, a hit-error scatter and a **rolling UR-over-time line chart** (Y-axis values, min/max markers, hover readout); clicking a point jumps. In Mistakes, **100/50 are checkboxes** next to the Aim/Tapping/Other filters, plus a **Group by type** toggle.
+- **Export ETA**: estimated time remaining shown while rendering; the mashup shows a progress bar + ETA too. (Encoder + elapsed/fps were already shown.)
+- **HUD mod icons**: doubled in size and moved below the accuracy counter (were tiny and cramped).
 - **Map Practice** tab (same song): build a map from sections at any point, merge sections from different difficulties, editor-style preview (play/pause/seek + music + volume), optional audio trsim to the practiced part.
 - **Replay Reviewer audio**: effect-sound volume slider fixed; hitsounds now come from the **chosen skin** by default, with a toggle "use beatmap hitsounds".
 - **Cheat check v1** (in the Reviewer): timewarp (frametime histogram), cursor snaps, unstable rate, pairwise replay similarity. Snap timings are now in m:ss.cs and **clickable to jump** to that point in the replay.
@@ -27,17 +32,16 @@ test each overlay. i think some of them are gonna be broken or useless anyway
 ## 🎬 Video export
 
 - **Pause & resume the export** — feasible: rendering is deterministic, so stop at frame N and resume from N+1. Same-session is easy; resuming after closing the app needs a small persisted state file (options, next frame, replay). (Note: now streaming via raw-pipe, so "resume" means re-run ffmpeg from scratch or re-encode — revisit the approach.)
-- Show the **encoder used** (NVENC/AMF/QSV/CPU) and elapsed time / fps in the dialog.
 - **MessagePort** instead of per-frame IPC for faster frame streaming.
 - Continuous sounds (slider slide, spinner spin), storyboard samples, DT/HT audio tempo. Also: trim the outro after the last object.
 
 ## 🗺️ Map Practice
 
-- Merge across **different songs** (needs audio splicing) — see Songs compilation.
+- Merge across **different songs** (needs audio splicing) — see Song Mashup (done, mp3-only).
 
-## 🎵 Songs compilation
+## 🎵 Song Mashup
 
-- Merge chosen songs into one, with default checkboxes: keep the same BPM timings / only mp3 audio.
+- ✅ Done (mp3 mashup). Possible polish: loudness-normalize option, per-segment preview at the chosen speed, adjustable rolling window for the UR chart.
 
 ## 🔍 Cheat check
 
@@ -63,8 +67,7 @@ test each overlay. i think some of them are gonna be broken or useless anyway
 - Left menu: duplicate Analyzer removed. Still optional: split **osu coaching** (Analyzer / Trainer / Speed Changer / Skins) on the left, **osu tools** (the rest) on the top menu (bigger nav redesign — discuss first).
 - General UI pass (later).
 
--Add a "Ur analyzer" to "mistakes": showing average ur during the play with a chart, suggested offset. clicking mistakes that caused 100s or 50s (Not just misses like in the mistakes section )
-
+- Add export cancel (✅ done) — pause/resume still TODO (see Video export).
 
 ## 🧪 Hard / future
 
