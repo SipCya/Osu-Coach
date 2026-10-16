@@ -109,6 +109,7 @@ export const it: Record<TranslationKey, string> = {
   "coach.meanError": "Errore medio",
   "coach.suggestedOffset": "Offset suggerito",
   "coach.hitErrors": "Errori di timing nel tempo (clicca un punto per saltare)",
+  "coach.urOverTime": "UR nel tempo (mobile)",
   "coach.late": "in ritardo",
   "coach.early": "in anticipo",
   "coach.noTiming": "Nessun hit cronometrato in questo replay.",

@@ -107,6 +107,7 @@ export const en = {
   "coach.meanError": "Average error",
   "coach.suggestedOffset": "Suggested offset",
   "coach.hitErrors": "Hit errors over time (click a point to jump)",
+  "coach.urOverTime": "UR over time (rolling)",
   "coach.late": "late",
   "coach.early": "early",
   "coach.noTiming": "No timed hits in this replay.",
