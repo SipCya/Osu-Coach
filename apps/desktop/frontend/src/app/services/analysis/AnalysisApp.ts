@@ -9,6 +9,7 @@ import { GameLoop } from "../common/game/GameLoop";
 import { ScenarioManager } from "../manager/ScenarioManager";
 import { ReplayFileWatcher } from "../common/local/ReplayFileWatcher";
 import { OsuFolderService } from "../common/local/OsuFolderService";
+import { OsuDBDao } from "../common/local/OsuDBDao";
 import { ClipRecorder } from "../manager/ClipRecorder";
 import { ModSettingsService } from "./mod-settings";
 import { ScreenshotTaker } from "./screenshot";
@@ -28,6 +29,7 @@ export class AnalysisApp {
     public readonly clipRecorder: ClipRecorder,
     public readonly videoExporter: VideoExporter,
     public readonly osuFolderService: OsuFolderService,
+    public readonly osuDBDao: OsuDBDao,
     private readonly replayService: ReplayService,
     private readonly gameLoop: GameLoop,
     public readonly beatmapManager: BeatmapManager,

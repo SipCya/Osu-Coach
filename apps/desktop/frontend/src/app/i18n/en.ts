@@ -186,6 +186,7 @@ export const en = {
   "nav.trainer": "Aim Trainer",
   "nav.skins": "Skins",
   "nav.flashlight": "Flashlight",
+  "nav.compilation": "Song Mashup",
 
   "sc.followGame": "Follow the map selected in osu!",
   "sc.tosuConnected": "Connected to tosu",
@@ -666,6 +667,30 @@ export const en = {
   "fl.savedFile": "Saved {path}.",
   "fl.cursorNotes":
     "In osu! keep cursor size at 1.0, otherwise the circle grows or shrinks with it. A cursor image cannot follow the combo, so it does not shrink at 100 and 200.",
+
+  "comp.title": "Song Mashup",
+  "comp.subtitle": "Stitch parts of your songs into a single audio file.",
+  "comp.library": "Your songs",
+  "comp.searchPlaceholder": "Search by title or artist…",
+  "comp.noResults": "No songs match your search.",
+  "comp.add": "Add",
+  "comp.segments": "Mashup",
+  "comp.emptyHint": "Add songs from your library to start building the mashup.",
+  "comp.gap": "Gap",
+  "comp.noGap": "None",
+  "comp.crossfade": "Crossfade",
+  "comp.rate": "Speed",
+  "comp.fadeIn": "Fade in",
+  "comp.fadeOut": "Fade out",
+  "comp.moveUp": "Move up",
+  "comp.moveDown": "Move down",
+  "comp.total": "Total length",
+  "comp.create": "Create mashup",
+  "comp.reset": "Clear screen",
+  "comp.timeLeft": "~{time} left",
+  "comp.done": "Saved {file}",
+  "comp.reveal": "Show in folder",
+  "comp.audioMissing": "Audio file not found: {file}",
 };
 
 export type TranslationKey = keyof typeof en;

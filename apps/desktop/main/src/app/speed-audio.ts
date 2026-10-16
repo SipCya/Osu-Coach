@@ -5,6 +5,7 @@ import { once } from "events";
 import { existsSync } from "fs";
 import { rename, unlink } from "fs/promises";
 import { join } from "path";
+import { buildMashupFilter, MashupPlan } from "./mashup-filter";
 
 export interface SpeedAudioRequest {
   input: string;
@@ -124,6 +125,69 @@ export async function createTrimmedAudio({ input, output, startMs, endMs }: Trim
       temp,
     ]);
     await rename(temp, output);
+  } catch (e) {
+    await unlink(temp).catch(() => undefined);
+    throw e;
+  }
+  return { output };
+}
+
+export interface CompileMashupRequest {
+  /** One file per segment; segment N reads input N (same file may repeat). */
+  inputs: string[];
+  plan: MashupPlan;
+  output: string;
+}
+
+export interface MashupProgress {
+  value: number; // 0..1
+  elapsedMs: number;
+}
+
+/**
+ * Stitch several audio slices into a single mp3 (gaps / crossfades / fades / per-segment rate).
+ * Streams ffmpeg's `-progress` output so callers can show a determinate bar and ETA.
+ */
+export async function createMashup(
+  { inputs, plan, output }: CompileMashupRequest,
+  onProgress?: (p: MashupProgress) => void,
+) {
+  if (inputs.length === 0 || plan.segments.length === 0) throw new Error("Nessun segmento da unire");
+  for (const f of inputs) {
+    if (!existsSync(f)) throw new Error(`File audio non trovato: ${f}`);
+  }
+  const { filterComplex, outLabel, totalMs } = buildMashupFilter(plan);
+  const temp = `${output}.part.mp3`;
+  const args = ["-y", "-hide_banner", "-loglevel", "error", "-progress", "pipe:1", "-nostats"];
+  for (const f of inputs) args.push("-i", f);
+  args.push("-filter_complex", filterComplex, "-map", `[${outLabel}]`, "-c:a", "libmp3lame", "-q:a", "2", temp);
+
+  const started = Date.now();
+  const proc = spawn(ffmpegPath(), args, { windowsHide: true });
+  let stderr = "";
+  let stdoutBuf = "";
+  proc.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+  proc.stdout.on("data", (d: Buffer) => {
+    stdoutBuf += d.toString();
+    const lines = stdoutBuf.split("\n");
+    stdoutBuf = lines.pop() ?? "";
+    for (const line of lines) {
+      const m = /^out_time_us=(\d+)/.exec(line.trim());
+      if (m && totalMs > 0 && onProgress) {
+        const doneMs = Number(m[1]) / 1000;
+        onProgress({ value: Math.max(0, Math.min(1, doneMs / totalMs)), elapsedMs: Date.now() - started });
+      }
+    }
+  });
+
+  try {
+    const [code] = (await once(proc, "close")) as [number];
+    if (code !== 0) {
+      const tail = stderr.trim().split("\n").filter(Boolean).slice(-6).join(" | ");
+      throw new Error(tail || `ffmpeg exited with code ${code}`);
+    }
+    await rename(temp, output);
+    onProgress?.({ value: 1, elapsedMs: Date.now() - started });
   } catch (e) {
     await unlink(temp).catch(() => undefined);
     throw e;
@@ -370,6 +434,9 @@ export function videoExportCancel(): void {
 export function setupSpeedAudioListeners() {
   ipcMain.handle("speedChangeAudio", (event, request: SpeedAudioRequest) => createSpeedAudio(request));
   ipcMain.handle("trimAudio", (event, request: TrimAudioRequest) => createTrimmedAudio(request));
+  ipcMain.handle("compileMashup", (event, request: CompileMashupRequest) =>
+    createMashup(request, (p) => event.sender.send("mashupProgress", p)),
+  );
   ipcMain.handle("convertToMp4", (event, request: ConvertToMp4Request) => convertToMp4(request));
   ipcMain.handle("detectVideoEncoder", () => detectH264Encoder());
   ipcMain.handle("assembleVideo", (event, request: AssembleVideoRequest) => assembleVideo(request));
