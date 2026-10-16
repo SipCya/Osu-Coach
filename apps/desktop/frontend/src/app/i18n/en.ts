@@ -292,6 +292,7 @@ export const en = {
   "ev.rendering": "Rendering frames… {pct}%",
   "ev.encoding": "Encoding MP4…",
   "ev.encoderLine": "Encoder: {encoder} · {time} · {fps} fps",
+  "ev.timeLeft": "~{time} left",
   "ev.visual": "On screen",
   "ev.cursor": "Cursor",
   "ev.trail": "Cursor trail",

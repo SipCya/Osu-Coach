@@ -295,6 +295,13 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
                 fps: Math.round(progress.fps ?? 0),
               })}
             </Typography>
+            {progress.value > 0.01 && (progress.elapsedMs ?? 0) > 0 && (
+              <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block" }}>
+                {t("ev.timeLeft", {
+                  time: fmtTime((progress.elapsedMs! * (1 - progress.value)) / progress.value),
+                })}
+              </Typography>
+            )}
           </Box>
         )}
         {progress.phase === "encoding" && (
