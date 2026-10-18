@@ -5,17 +5,18 @@ remove claude code in the repository. no tracks of claude code in the pushes. we
 
 export as mp4:
 
-cursor dimension is missing in the settings.
+~~cursor dimension is missing in the settings.~~ — ✅ already there (the "Cursor size" slider, 10–200%).
 check for anything that could be missing.
 
 TODO:
-test each overlay. i think some of them are gonna be broken or useless anyway
+~~test each overlay~~ — ✅ checked, all overlays look fine.
 
 ## ✅ Done (recent)
 
-- **Song Mashup** tab (mp3 mashup only — the map-merge idea was dropped): browse the osu! library (searchable), pick parts of songs on a **waveform** (scrub + preview volume), per-segment **speed** and **fade in/out**, per-join **gap or crossfade**, single-pass ffmpeg engine; live total length + render progress and ETA.
+- **Song Mashup** tab (mp3 mashup only — the map-merge idea was dropped): browse the osu! library (searchable), pick parts of songs on a **waveform** (scrub + preview volume + **preview at the chosen speed**), per-segment **speed** and **fade in/out**, per-join **gap or crossfade**, optional **loudness-match** (EBU R128) across songs, single-pass ffmpeg engine; live total length + render progress and ETA.
 - **Tab state persistence**: switching tabs no longer resets a screen. Tool tabs are kept mounted (keep-alive, clock paused on switch); Map Practice uses `usePersistentState` (it shares the Analyzer's PIXI renderer so it can't be kept alive).
-- **UR analyzer** (second tab in the coach/Mistakes panel, not a popup): UR, average error, **suggested offset** (= mean, osu! sign), 300/100/50/miss counts, a hit-error scatter and a **rolling UR-over-time line chart** (Y-axis values, min/max markers, hover readout); clicking a point jumps. In Mistakes, **100/50 are checkboxes** next to the Aim/Tapping/Other filters, plus a **Group by type** toggle.
+- **UR analyzer** (second tab in the coach/Mistakes panel, not a popup): UR, average error, **suggested offset** (= mean, osu! sign), 300/100/50/miss counts, a hit-error scatter and a **rolling UR-over-time line chart** (Y-axis values, min/max markers, hover readout, **adjustable rolling window** 15/30/50/100); clicking a point jumps. In Mistakes, **100/50 are checkboxes** next to the Aim/Tapping/Other filters, plus a **Group by type** toggle.
+- **Continuous export sounds**: the exported video's audio now mixes **slider slides** (`sliderslide`/`sliderwhistle`, while the head was hit) and **spinner spins** (`spinnerspin`), looped for each object's duration, on top of the hit samples.
 - **Export ETA**: estimated time remaining shown while rendering; the mashup shows a progress bar + ETA too. (Encoder + elapsed/fps were already shown.)
 - **HUD mod icons**: doubled in size and moved below the accuracy counter (were tiny and cramped).
 - **Map Practice** tab (same song): build a map from sections at any point, merge sections from different difficulties, editor-style preview (play/pause/seek + music + volume), optional audio trsim to the practiced part.
@@ -31,9 +32,10 @@ test each overlay. i think some of them are gonna be broken or useless anyway
 
 ## 🎬 Video export
 
-- **Pause & resume the export** — feasible: rendering is deterministic, so stop at frame N and resume from N+1. Same-session is easy; resuming after closing the app needs a small persisted state file (options, next frame, replay). (Note: now streaming via raw-pipe, so "resume" means re-run ffmpeg from scratch or re-encode — revisit the approach.)
-- **MessagePort** instead of per-frame IPC for faster frame streaming.
-- Continuous sounds (slider slide, spinner spin), storyboard samples, DT/HT audio tempo. Also: trim the outro after the last object.
+- ✅ **Pause & resume (same session)**: the render loop can be paused/resumed and cancelled from the export dialog (ffmpeg stays alive while paused). **Resume after closing the app is still TODO** — the raw-pipe produces a single streamed mp4, so it needs a **segmented rewrite**: render in chunks (each a complete mp4), persist a small state file (options, replay, done chunks), continue the missing chunks on relaunch, then concat + mux audio.
+- ✅ **MessagePort** frame transport: frames are transferred to main over a dedicated port with a credit window (no per-frame IPC round-trip).
+- Storyboard samples (one-shot audio samples triggered by the storyboard).
+- ✅ Export now plays at the replay speed (DT/HT, video + audio); ✅ "Trim outro" option; ✅ continuous slider/spinner sounds in the mixdown.
 
 ## 🗺️ Map Practice
 
@@ -41,7 +43,7 @@ test each overlay. i think some of them are gonna be broken or useless anyway
 
 ## 🎵 Song Mashup
 
-- ✅ Done (mp3 mashup). Possible polish: loudness-normalize option, per-segment preview at the chosen speed, adjustable rolling window for the UR chart.
+- ✅ Done (mp3 mashup), incl. loudness-match option + per-segment preview at the chosen speed. Possible further polish: per-segment gain trim, beat-synced crossfades.
 
 ## 🔍 Cheat check
 
@@ -67,7 +69,7 @@ test each overlay. i think some of them are gonna be broken or useless anyway
 - Left menu: duplicate Analyzer removed. Still optional: split **osu coaching** (Analyzer / Trainer / Speed Changer / Skins) on the left, **osu tools** (the rest) on the top menu (bigger nav redesign — discuss first).
 - General UI pass (later).
 
-- Add export cancel (✅ done) — pause/resume still TODO (see Video export).
+- Add export cancel (✅ done) — pause/resume same-session (✅ done); resume-after-close still TODO (see Video export).
 
 ## 🧪 Hard / future
 

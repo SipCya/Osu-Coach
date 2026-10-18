@@ -8,6 +8,7 @@ import { CompSegment } from "./mashup";
  */
 export const mashupSegments$ = new BehaviorSubject<CompSegment[]>([]);
 export const mashupQuery$ = new BehaviorSubject<string>("");
+export const mashupLoudnorm$ = new BehaviorSubject<boolean>(false);
 
 export function setMashupSegments(update: CompSegment[] | ((prev: CompSegment[]) => CompSegment[])): void {
   const next = typeof update === "function" ? update(mashupSegments$.getValue()) : update;
@@ -18,4 +19,5 @@ export function setMashupSegments(update: CompSegment[] | ((prev: CompSegment[])
 export function resetMashup(): void {
   mashupSegments$.next([]);
   mashupQuery$.next("");
+  mashupLoudnorm$.next(false);
 }

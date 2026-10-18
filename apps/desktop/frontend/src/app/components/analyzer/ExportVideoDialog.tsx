@@ -288,7 +288,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
         {progress.phase === "rendering" && (
           <Box sx={{ mt: 2 }}>
             <Typography variant={"body2"} sx={{ mb: 0.5 }}>
-              {t("ev.rendering", { pct: Math.round(progress.value * 100) })}
+              {progress.paused ? t("ev.paused") : t("ev.rendering", { pct: Math.round(progress.value * 100) })}
             </Typography>
             <LinearProgress variant={"determinate"} value={progress.value * 100} sx={BAR} />
             <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block", mt: 0.5 }}>
@@ -298,13 +298,27 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
                 fps: Math.round(progress.fps ?? 0),
               })}
             </Typography>
-            {progress.value > 0.01 && (progress.elapsedMs ?? 0) > 0 && (
+            {progress.value > 0.01 && (progress.elapsedMs ?? 0) > 0 && !progress.paused && (
               <Typography variant={"caption"} color={"text.secondary"} sx={{ display: "block" }}>
                 {t("ev.timeLeft", {
                   time: fmtTime((progress.elapsedMs! * (1 - progress.value)) / progress.value),
                 })}
               </Typography>
             )}
+            <Stack direction={"row"} gap={1} sx={{ mt: 1 }}>
+              {progress.paused ? (
+                <Button size={"small"} variant={"outlined"} onClick={() => analyzer.videoExporter.resumeExport()}>
+                  {t("ev.resume")}
+                </Button>
+              ) : (
+                <Button size={"small"} variant={"outlined"} onClick={() => analyzer.videoExporter.pauseExport()}>
+                  {t("ev.pause")}
+                </Button>
+              )}
+              <Button size={"small"} color={"error"} onClick={() => analyzer.videoExporter.cancelExport()}>
+                {t("ev.cancel")}
+              </Button>
+            </Stack>
           </Box>
         )}
         {progress.phase === "encoding" && (

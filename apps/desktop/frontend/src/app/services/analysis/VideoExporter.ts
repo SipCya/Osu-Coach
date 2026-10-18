@@ -25,6 +25,10 @@ import { ModSettingsService } from "./mod-settings";
 
 const START_LEAD_IN_MS = 2000;
 const OUTRO_TAIL_MS = 1500; // kept after the last object when trimming the outro
+const FRAME_WINDOW = 8; // max frames in flight over the MessagePort before awaiting an ack
+
+/** Thrown to unwind the render loop when the user cancels; handled as a non-error. */
+class ExportCancelled extends Error {}
 
 /** Encodes an AudioBuffer to 16-bit PCM WAV bytes. */
 function audioBufferToWav(buffer: AudioBuffer): Uint8Array {
@@ -74,6 +78,7 @@ export interface ExportProgress {
   encoder?: string;
   fps?: number;
   elapsedMs?: number;
+  paused?: boolean;
 }
 
 export interface VideoExportOptions {
@@ -108,6 +113,16 @@ export interface VideoExportOptions {
 export class VideoExporter {
   exportProgress$ = new BehaviorSubject<ExportProgress>({ phase: "idle", value: 0 });
   private exporting = false;
+  // Pause/resume (same session): the render loop awaits this gate while paused.
+  private paused = false;
+  private cancelled = false;
+  private pauseGate: Promise<void> | null = null;
+  private pauseRelease: (() => void) | null = null;
+  // MessagePort frame transport: a credit window bounds how many frames are in flight.
+  private framePort: MessagePort | null = null;
+  private credits = FRAME_WINDOW;
+  private creditWaiters: (() => void)[] = [];
+  private frameFailed = false;
 
   constructor(
     private readonly gameClock: GameplayClock,
@@ -134,6 +149,56 @@ export class VideoExporter {
 
   reset() {
     this.exportProgress$.next({ phase: "idle", value: 0 });
+  }
+
+  get isPaused() {
+    return this.paused;
+  }
+
+  /** Pause the in-progress render; ffmpeg stays alive, we simply stop feeding it frames. */
+  pauseExport() {
+    if (!this.exporting || this.paused || this.cancelled) return;
+    this.paused = true;
+    this.pauseGate = new Promise((resolve) => (this.pauseRelease = resolve));
+    const p = this.exportProgress$.getValue();
+    this.exportProgress$.next({ ...p, paused: true });
+  }
+
+  resumeExport() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.pauseRelease?.();
+    this.pauseGate = null;
+    this.pauseRelease = null;
+    const p = this.exportProgress$.getValue();
+    this.exportProgress$.next({ ...p, paused: false });
+  }
+
+  /** Abort the in-progress render and discard the partial output. */
+  cancelExport() {
+    if (!this.exporting) return;
+    this.cancelled = true;
+    if (this.paused) this.resumeExport(); // let the loop wake up and unwind
+  }
+
+  /** Post one RGBA frame over the port, waiting for a credit when the window is full. */
+  private async sendFrame(buffer: ArrayBuffer): Promise<void> {
+    if (this.frameFailed) throw new Error("The video encoder stopped unexpectedly");
+    if (this.credits <= 0) await new Promise<void>((resolve) => this.creditWaiters.push(resolve));
+    if (this.frameFailed) throw new Error("The video encoder stopped unexpectedly");
+    this.credits--;
+    this.framePort?.postMessage(buffer, [buffer]);
+  }
+
+  private closeFramePort() {
+    try {
+      this.framePort?.close();
+    } catch {
+      /* already closed */
+    }
+    this.framePort = null;
+    this.creditWaiters.forEach((w) => w());
+    this.creditWaiters = [];
   }
 
   private firstObjectMs(): number {
@@ -185,6 +250,11 @@ export class VideoExporter {
     if (!output) return;
 
     this.exporting = true;
+    this.paused = false;
+    this.cancelled = false;
+    this.frameFailed = false;
+    this.credits = FRAME_WINDOW;
+    this.creditWaiters = [];
     const height = options.renderHeight;
     const width = Math.round((height * 16) / 9 / 2) * 2;
     const outputFps = options.outputFps;
@@ -268,6 +338,24 @@ export class VideoExporter {
         }
       }
 
+      // Dedicated MessagePort for frame bytes: the renderer transfers each frame's buffer to
+      // main without a per-frame IPC round-trip; main posts an { ack } back per frame for flow control.
+      const channel = new MessageChannel();
+      this.framePort = channel.port1;
+      this.framePort.onmessage = (e: MessageEvent) => {
+        const d = e.data as { ack?: number; fail?: number };
+        if (d?.fail) {
+          this.frameFailed = true;
+          this.creditWaiters.forEach((w) => w());
+          this.creditWaiters = [];
+        } else if (d?.ack) {
+          this.credits++;
+          this.creditWaiters.shift()?.();
+        }
+      };
+      this.framePort.start();
+      ipcRenderer.postMessage("videoExportSetupPort", null, [channel.port2]);
+
       const encoder: string = await ipcRenderer.invoke("detectVideoEncoder");
       await ipcRenderer.invoke("videoExportStart", {
         width,
@@ -285,8 +373,16 @@ export class VideoExporter {
       started = true;
 
       const renderStart = performance.now();
+      let pausedMs = 0;
       this.exportProgress$.next({ phase: "rendering", value: 0, encoder });
       for (let i = 0; i <= total; i++) {
+        if (this.cancelled) throw new ExportCancelled();
+        if (this.pauseGate) {
+          const pauseStart = performance.now();
+          await this.pauseGate;
+          pausedMs += performance.now() - pauseStart;
+          if (this.cancelled) throw new ExportCancelled();
+        }
         const t = Math.min(endMs, startMs + (i / sourceFps) * 1000 * rate);
         this.gameClock.seekTo(t);
         this.gameSimulator.simulate(t);
@@ -296,15 +392,19 @@ export class VideoExporter {
         const canvas = extract.canvas(rt);
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Could not read the rendered frame");
+        // getImageData allocates a fresh buffer each call, so transferring it to main is safe.
         const data = ctx.getImageData(0, 0, width, height).data;
-        await ipcRenderer.invoke("videoExportFrame", Buffer.from(data.buffer, data.byteOffset, data.byteLength));
+        await this.sendFrame(data.buffer);
         if (i % 4 === 0) {
-          const elapsedMs = performance.now() - renderStart;
+          const elapsedMs = performance.now() - renderStart - pausedMs;
           const fps = elapsedMs > 0 ? (i + 1) / (elapsedMs / 1000) : 0;
-          this.exportProgress$.next({ phase: "rendering", value: i / total, encoder, fps, elapsedMs });
+          this.exportProgress$.next({ phase: "rendering", value: i / total, encoder, fps, elapsedMs, paused: this.paused });
         }
       }
 
+      // Wait for ffmpeg to consume every queued frame before finishing.
+      while (this.credits < FRAME_WINDOW && !this.frameFailed) await new Promise((r) => setTimeout(r, 5));
+      if (this.frameFailed) throw new Error("The video encoder stopped unexpectedly");
       blackBackdrop.destroy();
       this.exportProgress$.next({ phase: "encoding", value: 1, encoder });
       await ipcRenderer.invoke("videoExportFinish");
@@ -318,9 +418,16 @@ export class VideoExporter {
       });
     } catch (e) {
       if (started) await ipcRenderer.invoke("videoExportCancel").catch(() => undefined);
-      const message = (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
-      this.exportProgress$.next({ phase: "error", value: 0, message });
+      if (e instanceof ExportCancelled) {
+        this.exportProgress$.next({ phase: "idle", value: 0 });
+      } else {
+        const message = (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+        this.exportProgress$.next({ phase: "error", value: 0, message });
+      }
     } finally {
+      this.closeFramePort();
+      this.paused = false;
+      this.cancelled = false;
       rt?.destroy(true);
       renderer.resize(prevW, prevH);
       this.renderManager.resizeCanvasToDisplaySize();

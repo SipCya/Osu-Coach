@@ -4,7 +4,8 @@ import { join } from "path";
 import { STAGE_TYPES } from "../types";
 import { AudioEngine } from "../common/audio/AudioEngine";
 import { GameplayClock } from "../common/game/GameplayClock";
-import { HitsoundEvent } from "./hitsound-events";
+import { ContinuousEvent, HitsoundEvent } from "./hitsound-events";
+import { SampleRequest } from "./hitsound-data";
 
 export interface HitsoundFolders {
   beatmap: string;
@@ -21,6 +22,13 @@ interface PlayableSound {
 
 interface PlayableEvent {
   time: number;
+  sounds: PlayableSound[];
+}
+
+/** A slider-slide / spinner-spin loop, resolved to buffers (export mixdown only). */
+interface PlayableContinuous {
+  startMs: number;
+  endMs: number;
   sounds: PlayableSound[];
 }
 
@@ -53,12 +61,15 @@ function findFile(index: Map<string, string>, base: string | null): string | nul
 @injectable()
 export class HitsoundPlayer {
   private events: PlayableEvent[] = [];
+  // Looping slider/spinner sounds, only consumed by renderMixdown (not scheduled live).
+  private continuous: PlayableContinuous[] = [];
   private pointer = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private scheduled = new Set<AudioBufferSourceNode>();
   private buffers = new Map<string, Promise<AudioBuffer | null>>();
   private loadToken = 0;
   private lastEvents: HitsoundEvent[] = [];
+  private lastContinuous: ContinuousEvent[] = [];
   private lastFolders: HitsoundFolders | null = null;
 
   constructor(
@@ -85,38 +96,52 @@ export class HitsoundPlayer {
     return promise;
   }
 
-  async load(events: HitsoundEvent[], folders: HitsoundFolders) {
+  async load(events: HitsoundEvent[], continuous: ContinuousEvent[], folders: HitsoundFolders) {
     const token = ++this.loadToken;
     this.lastEvents = events;
+    this.lastContinuous = continuous;
     this.lastFolders = folders;
     const [beatmap, skin, fallback] = await Promise.all([
       listFolder(folders.beatmap),
       listFolder(folders.skin),
       listFolder(folders.fallback),
     ]);
-    const playable: PlayableEvent[] = [];
-    for (const event of events) {
+    const resolve = (sample: SampleRequest): string | null =>
+      folders.useBeatmapHitsounds
+        ? findFile(beatmap, sample.beatmapFile) ??
+          findFile(skin, sample.skinFile) ??
+          findFile(fallback, sample.skinFile)
+        : findFile(skin, sample.skinFile) ?? findFile(fallback, sample.skinFile);
+    const toSounds = async (samples: SampleRequest[]): Promise<PlayableSound[]> => {
       const sounds: PlayableSound[] = [];
-      for (const sample of event.samples) {
-        const path = folders.useBeatmapHitsounds
-          ? findFile(beatmap, sample.beatmapFile) ??
-            findFile(skin, sample.skinFile) ??
-            findFile(fallback, sample.skinFile)
-          : findFile(skin, sample.skinFile) ?? findFile(fallback, sample.skinFile);
+      for (const sample of samples) {
+        const path = resolve(sample);
         if (!path) continue;
         const buffer = await this.decode(path);
         if (buffer) sounds.push({ buffer, volume: sample.volume });
       }
+      return sounds;
+    };
+
+    const playable: PlayableEvent[] = [];
+    for (const event of events) {
+      const sounds = await toSounds(event.samples);
       if (sounds.length > 0) playable.push({ time: event.time, sounds });
+    }
+    const playableContinuous: PlayableContinuous[] = [];
+    for (const event of continuous) {
+      const sounds = await toSounds(event.samples);
+      if (sounds.length > 0) playableContinuous.push({ startMs: event.startMs, endMs: event.endMs, sounds });
     }
     if (token !== this.loadToken) return;
     this.events = playable;
+    this.continuous = playableContinuous;
     this.resync();
   }
 
   async changeSkinFolder(skin: string | null) {
     if (!this.lastFolders || this.lastFolders.skin === skin) return;
-    await this.load(this.lastEvents, { ...this.lastFolders, skin });
+    await this.load(this.lastEvents, this.lastContinuous, { ...this.lastFolders, skin });
   }
 
   /**
@@ -163,19 +188,40 @@ export class HitsoundPlayer {
       }
     }
 
+    // Looping slider slides / spinner spins, trimmed to the object's span (and the render window).
+    const endSec = durationMs / 1000;
+    for (const event of this.continuous) {
+      const from = Math.max(event.startMs / 1000, startSec);
+      const to = Math.min(event.endMs / 1000, endSec);
+      const span = to - from;
+      if (span <= 0) continue;
+      for (const sound of event.sounds) {
+        const source = offline.createBufferSource();
+        source.buffer = sound.buffer;
+        source.loop = true;
+        const gain = offline.createGain();
+        gain.gain.value = sampleLevel * sound.volume;
+        source.connect(gain).connect(offline.destination);
+        source.start(from - startSec);
+        source.stop(from - startSec + span);
+      }
+    }
+
     return offline.startRendering();
   }
 
   async setUseBeatmapHitsounds(useBeatmapHitsounds: boolean) {
     if (!this.lastFolders || this.lastFolders.useBeatmapHitsounds === useBeatmapHitsounds) return;
-    await this.load(this.lastEvents, { ...this.lastFolders, useBeatmapHitsounds });
+    await this.load(this.lastEvents, this.lastContinuous, { ...this.lastFolders, useBeatmapHitsounds });
   }
 
   clear() {
     this.loadToken++;
     this.stopSources();
     this.events = [];
+    this.continuous = [];
     this.lastEvents = [];
+    this.lastContinuous = [];
     this.lastFolders = null;
     this.pointer = 0;
   }

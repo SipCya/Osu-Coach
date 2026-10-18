@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Chip, Stack, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { CoachAnalysis, HitTiming } from "../../services/coach/mistakes";
 import { useTranslation } from "../../i18n";
 
@@ -118,6 +118,8 @@ function HitErrorChart({
   );
 }
 
+const WINDOW_PRESETS = [15, 30, 50, 100];
+
 /** Rolling unstable rate over a sliding window of the most recent hits. */
 function rollingUr(hits: HitTiming[], window = 30): { time: number; ur: number }[] {
   const out: { time: number; ur: number }[] = [];
@@ -142,12 +144,22 @@ function mmss(ms: number): string {
 }
 
 /** Line chart of the rolling UR over time, with Y-axis values, min/max markers and a hover readout. */
-function UrLineChart({ hits, overallUr, onSeek }: { hits: HitTiming[]; overallUr: number; onSeek: (ms: number) => void }) {
+function UrLineChart({
+  hits,
+  overallUr,
+  windowSize,
+  onSeek,
+}: {
+  hits: HitTiming[];
+  overallUr: number;
+  windowSize: number;
+  onSeek: (ms: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(300);
   const [hover, setHover] = useState<number | null>(null);
-  const points = useMemo(() => rollingUr(hits), [hits]);
+  const points = useMemo(() => rollingUr(hits, windowSize), [hits, windowSize]);
 
   const extremes = useMemo(() => {
     if (points.length === 0) return null;
@@ -307,6 +319,7 @@ export function UrAnalyzerPanel({ analysis, onSeek }: { analysis: CoachAnalysis;
   const { t } = useTranslation();
   const { timing } = analysis;
   const missCount = analysis.mistakes.filter((m) => m.kind === "Miss").length;
+  const [urWindow, setUrWindow] = useState(30);
 
   if (timing.hits.length === 0) {
     return (
@@ -343,10 +356,27 @@ export function UrAnalyzerPanel({ analysis, onSeek }: { analysis: CoachAnalysis;
       </Box>
 
       <Box>
-        <Typography variant={"caption"} color={"text.secondary"}>
-          {t("coach.urOverTime")}
-        </Typography>
-        <UrLineChart hits={timing.hits} overallUr={timing.ur} onSeek={onSeek} />
+        <Stack direction={"row"} alignItems={"center"} justifyContent={"space-between"} sx={{ mb: 0.5 }}>
+          <Typography variant={"caption"} color={"text.secondary"}>
+            {t("coach.urOverTime")}
+          </Typography>
+          <Tooltip title={t("coach.urWindow")}>
+            <ToggleButtonGroup
+              size={"small"}
+              exclusive
+              value={urWindow}
+              onChange={(_, v) => v && setUrWindow(v)}
+              sx={{ "& .MuiToggleButton-root": { px: 1, py: 0.1, fontSize: "0.7rem", textTransform: "none" } }}
+            >
+              {WINDOW_PRESETS.map((w) => (
+                <ToggleButton key={w} value={w}>
+                  {w}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Tooltip>
+        </Stack>
+        <UrLineChart hits={timing.hits} overallUr={timing.ur} windowSize={urWindow} onSeek={onSeek} />
       </Box>
     </Stack>
   );

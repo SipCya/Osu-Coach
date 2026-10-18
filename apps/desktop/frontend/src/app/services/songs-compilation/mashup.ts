@@ -20,6 +20,7 @@ export interface MashupPlan {
   segments: MashupSegment[];
   joins: MashupJoin[];
   sampleRate?: number;
+  loudnorm?: boolean;
 }
 
 /** UI-facing segment: a chosen slice of one library song plus its effects and the join after it. */
@@ -79,7 +80,7 @@ export function estimateDurationMs(segs: CompSegment[]): number {
 }
 
 /** Turn the UI segments into the `{ inputs, plan }` payload for the `compileMashup` IPC call. */
-export function toPlanAndInputs(segs: CompSegment[]): { inputs: string[]; plan: MashupPlan } {
+export function toPlanAndInputs(segs: CompSegment[], loudnorm = false): { inputs: string[]; plan: MashupPlan } {
   const inputs = segs.map((s) => s.song.audioPath);
   const segments: MashupSegment[] = segs.map((s, i) => ({
     input: i,
@@ -90,5 +91,5 @@ export function toPlanAndInputs(segs: CompSegment[]): { inputs: string[]; plan: 
     fadeOutMs: s.fadeOutMs,
   }));
   const joins: MashupJoin[] = segs.slice(0, -1).map((s) => s.joinAfter);
-  return { inputs, plan: { segments, joins } };
+  return { inputs, plan: { segments, joins, loudnorm } };
 }

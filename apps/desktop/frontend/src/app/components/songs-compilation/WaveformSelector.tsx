@@ -61,12 +61,14 @@ export interface WaveformSelectorProps {
   src: string;
   startMs: number;
   endMs: number;
+  /** Preview playback speed (matches the segment's rate). Pitch is preserved, like the ffmpeg atempo. */
+  rate?: number;
   onChange: (startMs: number, endMs: number) => void;
   onDuration?: (durationMs: number) => void;
 }
 
 /** Waveform with draggable start/end handles and preview playback of the selected region. */
-export function WaveformSelector({ src, startMs, endMs, onChange, onDuration }: WaveformSelectorProps) {
+export function WaveformSelector({ src, startMs, endMs, rate = 1, onChange, onDuration }: WaveformSelectorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -117,6 +119,14 @@ export function WaveformSelector({ src, startMs, endMs, onChange, onDuration }: 
       /* ignore unavailable storage */
     }
   }, [volume]);
+
+  // Preview at the segment's chosen speed, pitch preserved (like the atempo used on export).
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.playbackRate = rate > 0 ? rate : 1;
+    audio.preservesPitch = true;
+  }, [rate]);
 
   const msToX = useCallback((ms: number) => (durationMs > 0 ? (ms / durationMs) * width : 0), [durationMs, width]);
   const xToMs = useCallback(

@@ -108,6 +108,7 @@ export const en = {
   "coach.suggestedOffset": "Suggested offset",
   "coach.hitErrors": "Hit errors over time (click a point to jump)",
   "coach.urOverTime": "UR over time (rolling)",
+  "coach.urWindow": "Hits per rolling window",
   "coach.late": "late",
   "coach.early": "early",
   "coach.noTiming": "No timed hits in this replay.",
@@ -295,6 +296,10 @@ export const en = {
   "ev.encoding": "Encoding MP4…",
   "ev.encoderLine": "Encoder: {encoder} · {time} · {fps} fps",
   "ev.timeLeft": "~{time} left",
+  "ev.paused": "Paused — resume to continue the render",
+  "ev.pause": "Pause",
+  "ev.resume": "Resume",
+  "ev.cancel": "Cancel",
   "ev.trimOutro": "Trim outro (end after the last object)",
   "ev.visual": "On screen",
   "ev.cursor": "Cursor",
@@ -703,6 +708,8 @@ export const en = {
   "comp.done": "Saved {file}",
   "comp.reveal": "Show in folder",
   "comp.audioMissing": "Audio file not found: {file}",
+  "comp.loudnorm": "Match loudness",
+  "comp.loudnormHint": "Even out the perceived volume across songs (EBU R128). Off keeps each song's original loudness.",
 };
 
 export type TranslationKey = keyof typeof en;

@@ -3,8 +3,10 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   LinearProgress,
@@ -44,7 +46,13 @@ import {
 } from "../../services/songs-compilation/mashup";
 import { WaveformSelector } from "../../components/songs-compilation/WaveformSelector";
 import { formatTime } from "../../services/map-practice/osu-practice";
-import { mashupQuery$, mashupSegments$, resetMashup, setMashupSegments } from "../../services/songs-compilation/mashup-store";
+import {
+  mashupLoudnorm$,
+  mashupQuery$,
+  mashupSegments$,
+  resetMashup,
+  setMashupSegments,
+} from "../../services/songs-compilation/mashup-store";
 
 const ACCENT = "#ff66aa";
 const GAP_PRESETS = [0, 500, 1000, 2000];
@@ -174,6 +182,7 @@ function SegmentCard({
         src={seg.song.audioPath}
         startMs={seg.startMs}
         endMs={seg.endMs}
+        rate={seg.rate}
         onChange={(startMs, endMs) => onChange({ startMs, endMs })}
         onDuration={(durationMs) =>
           onChange(seg.durationMs === 0 ? { durationMs, endMs: durationMs } : { durationMs })
@@ -251,6 +260,7 @@ export function SongsCompilation() {
   const setQuery = (v: string) => mashupQuery$.next(v);
   const segments = useObservable(() => mashupSegments$, mashupSegments$.getValue());
   const setSegments = setMashupSegments;
+  const loudnorm = useObservable(() => mashupLoudnorm$, mashupLoudnorm$.getValue());
   const [job, setJob] = useState<Job>({ state: "idle" });
   const [progress, setProgress] = useState<{ value: number; elapsedMs: number } | null>(null);
 
@@ -310,7 +320,7 @@ export function SongsCompilation() {
     const onProg = (_e: unknown, p: { value: number; elapsedMs: number }) => setProgress(p);
     ipcRenderer.on("mashupProgress", onProg);
     try {
-      const { inputs, plan } = toPlanAndInputs(segments);
+      const { inputs, plan } = toPlanAndInputs(segments, loudnorm);
       await ipcRenderer.invoke("compileMashup", { inputs, plan, output });
       setJob({ state: "done", file: output });
     } catch (e) {
@@ -320,7 +330,7 @@ export function SongsCompilation() {
       ipcRenderer.removeListener("mashupProgress", onProg);
       setProgress(null);
     }
-  }, [segments, songsFolder]);
+  }, [segments, songsFolder, loudnorm]);
 
   return (
     <Box sx={{ height: "100%", overflowY: "auto", p: 2 }}>
@@ -447,6 +457,20 @@ export function SongsCompilation() {
                 {formatTime(totalMs)}
               </Typography>
             </Box>
+            <Tooltip title={t("comp.loudnormHint")}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size={"small"}
+                    checked={loudnorm}
+                    onChange={(e) => mashupLoudnorm$.next(e.target.checked)}
+                    sx={{ color: ACCENT, "&.Mui-checked": { color: ACCENT } }}
+                  />
+                }
+                label={t("comp.loudnorm")}
+                sx={{ mr: 0 }}
+              />
+            </Tooltip>
             <Button
               variant={"contained"}
               disabled={segments.length === 0 || job.state === "working"}

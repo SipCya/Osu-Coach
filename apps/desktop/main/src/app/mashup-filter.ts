@@ -27,6 +27,8 @@ export interface MashupPlan {
   /** joins[i] joins segments[i] and segments[i+1]; length should be segments.length - 1. */
   joins: MashupJoin[];
   sampleRate?: number;
+  /** Even out perceived loudness across songs with a single-pass EBU R128 `loudnorm`. */
+  loudnorm?: boolean;
 }
 
 export interface BuiltMashup {
@@ -122,6 +124,12 @@ export function buildMashupFilter(plan: MashupPlan): BuiltMashup {
       }
     }
     accLabel = out;
+  }
+
+  // Optional loudness normalisation on the finished track (keeps songs at a comparable level).
+  if (plan.loudnorm) {
+    parts.push(`[${accLabel}]loudnorm=I=-16:TP=-1.5:LRA=11[ln]`);
+    accLabel = "ln";
   }
 
   return { filterComplex: parts.join(";"), outLabel: accLabel, totalMs: mashupDurationMs(plan) };

@@ -21,7 +21,7 @@ import { TextureManager } from "../textures/TextureManager";
 import { ReplayFileWatcher } from "../common/local/ReplayFileWatcher";
 import { ModSettingsService } from "../analysis/mod-settings";
 import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
-import { buildHitsoundEvents } from "../hitsounds/hitsound-events";
+import { buildContinuousEvents, buildHitsoundEvents } from "../hitsounds/hitsound-events";
 import { parseHitsoundData } from "../hitsounds/hitsound-data";
 import { SkinSettingsStore } from "../common/skin";
 import { HitsoundSettingsStore } from "../common/hitsound";
@@ -149,9 +149,11 @@ export class ScenarioManager {
     this.hitsoundPlayer.clear();
     const finalState = this.gameSimulator.getFinalState();
     if (finalState) {
-      const events = buildHitsoundEvents(beatmap.hitObjects, finalState, parseHitsoundData(rawBlueprint));
+      const hitsoundData = parseHitsoundData(rawBlueprint);
+      const events = buildHitsoundEvents(beatmap.hitObjects, finalState, hitsoundData);
+      const continuous = buildContinuousEvents(beatmap.hitObjects, finalState, hitsoundData);
       this.hitsoundPlayer
-        .load(events, {
+        .load(events, continuous, {
           beatmap: absoluteFolderPath,
           skin: this.currentSkinFolder(),
           fallback: join(this.builtInSkinsFolder, "OsuDefaultSkin"),

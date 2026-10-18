@@ -1,7 +1,21 @@
-import { HitsoundData, SampleRequest, samplesForHit, samplesForTick } from "./hitsound-data";
+import {
+  HitsoundData,
+  SampleRequest,
+  samplesForHit,
+  samplesForSliderBody,
+  samplesForSpinner,
+  samplesForTick,
+} from "./hitsound-data";
 
 export interface HitsoundEvent {
   time: number;
+  samples: SampleRequest[];
+}
+
+/** A sound that loops for a whole span (slider slide / spinner spin) — export mixdown only. */
+export interface ContinuousEvent {
+  startMs: number;
+  endMs: number;
   samples: SampleRequest[];
 }
 
@@ -9,6 +23,7 @@ export interface HitObjectLike {
   type: string;
   id?: string;
   hitTime?: number;
+  startTime?: number;
   head?: { id: string; hitTime: number };
   checkPoints?: { id: string; type: string; hitTime: number }[];
   repeatCount?: number;
@@ -55,4 +70,32 @@ export function buildHitsoundEvents(
     }
   });
   return events.sort((a, b) => a.time - b.time);
+}
+
+/**
+ * Looping sounds that play for the whole duration of an object: slider slides (while the head
+ * was hit, not missed) and spinner spins. These are mixed into the exported video's audio only.
+ */
+export function buildContinuousEvents(
+  hitObjects: HitObjectLike[],
+  state: VerdictState,
+  data: HitsoundData,
+): ContinuousEvent[] {
+  const events: ContinuousEvent[] = [];
+  hitObjects.forEach((object, index) => {
+    if (object.type === "SLIDER" && object.head) {
+      const head = state.hitCircleVerdict[object.head.id];
+      if (!head || head.type === "MISS") return;
+      const endMs = object.endTime ?? object.head.hitTime;
+      if (endMs <= head.judgementTime) return;
+      const samples = samplesForSliderBody(data, index, object.head.hitTime);
+      if (samples.length > 0) events.push({ startMs: head.judgementTime, endMs, samples });
+    } else if (object.type === "SPINNER") {
+      const startMs = object.startTime ?? object.hitTime;
+      const endMs = object.endTime;
+      if (startMs == null || endMs == null || endMs <= startMs) return;
+      events.push({ startMs, endMs, samples: samplesForSpinner(data, index, startMs) });
+    }
+  });
+  return events;
 }

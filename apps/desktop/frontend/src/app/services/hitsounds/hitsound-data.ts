@@ -196,3 +196,31 @@ export function samplesForTick(data: HitsoundData, objectIndex: number, time: nu
   const bank = bankOf(object.normalSet, bankOf(point.sampleSet, data.defaultSet));
   return [request(bank, "slidertick", point.index, point.volume)];
 }
+
+/**
+ * Looping sample(s) for a slider body: `sliderslide` in the slider's sample bank, plus
+ * `sliderwhistle` when the slider carries a whistle. Used only for the offline export mixdown.
+ */
+export function samplesForSliderBody(data: HitsoundData, objectIndex: number, time: number): SampleRequest[] {
+  const object = data.objects[objectIndex];
+  if (!object) return [];
+  const point = pointAt(data.points, time);
+  const pointBank = bankOf(point.sampleSet, data.defaultSet);
+  const normal = bankOf(object.normalSet, pointBank);
+  const index = object.index || point.index;
+  const volume = object.volume || point.volume;
+  const samples = [request(normal, "sliderslide", index, volume)];
+  if (object.hitSound & 2) {
+    const addition = bankOf(object.additionSet, normal);
+    samples.push(request(addition, "sliderwhistle", index, volume));
+  }
+  return samples;
+}
+
+/** Looping `spinnerspin` sample (bank-independent in osu!). Used only for the export mixdown. */
+export function samplesForSpinner(data: HitsoundData, objectIndex: number, time: number): SampleRequest[] {
+  const object = data.objects[objectIndex];
+  const point = pointAt(data.points, time);
+  const volume = (object?.volume || point.volume) / 100;
+  return [{ beatmapFile: null, skinFile: "spinnerspin", volume }];
+}
