@@ -138,30 +138,35 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
     } catch {
       /* fall back to a bare filename */
     }
-    analyzer.videoExporter.exportReplay({
-      outputFps: fps,
-      renderHeight,
-      upscaleHeight: upscale || undefined,
-      blurFactor,
-      includeAudio,
-      startAtFirstObject,
-      trimOutro,
-      backgroundDim: backgroundDim / 100,
-      backgroundBlur: backgroundBlur / 100,
-      showCursor,
-      showCursorTrail,
-      cursorScale: cursorScale / 100,
-      showAnalysisCursor,
-      showHitErrorBar,
-      hitErrorBarScale: hitErrorBarScale / 100,
-      showPlayfieldBorder,
-      showKeys,
-      showUr,
-      showMods,
-      showStats,
-      applyReplayMods,
-      defaultFileName,
-    });
+    try {
+      await analyzer.videoExporter.exportReplay({
+        outputFps: fps,
+        renderHeight,
+        upscaleHeight: upscale || undefined,
+        blurFactor,
+        includeAudio,
+        startAtFirstObject,
+        trimOutro,
+        backgroundDim: backgroundDim / 100,
+        backgroundBlur: backgroundBlur / 100,
+        showCursor,
+        showCursorTrail,
+        cursorScale: cursorScale / 100,
+        showAnalysisCursor,
+        showHitErrorBar,
+        hitErrorBarScale: hitErrorBarScale / 100,
+        showPlayfieldBorder,
+        showKeys,
+        showUr,
+        showMods,
+        showStats,
+        applyReplayMods,
+        defaultFileName,
+      });
+    } catch (e) {
+      // Surface any failure that escapes exportReplay instead of swallowing it silently.
+      analyzer.videoExporter.exportProgress$.next({ phase: "error", value: 0, message: String((e as Error)?.message ?? e) });
+    }
   };
 
   return (

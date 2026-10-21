@@ -36,6 +36,10 @@ const EXTENSIONS = [".wav", ".ogg", ".mp3"];
 const LOOKAHEAD_MS = 120;
 const TICK_MS = 20;
 const LATE_TOLERANCE_MS = 30;
+// A looping source (slider slide / spinner spin) needs a real buffer. Many skins ship an empty
+// "mute" sample (e.g. a 44-byte header-only WAV → a 0-length AudioBuffer); looping that makes the
+// offline renderer spin forever, so anything shorter than this is dropped from the continuous mix.
+const MIN_LOOP_SECONDS = 0.02;
 
 async function listFolder(folder: string | null): Promise<Map<string, string>> {
   if (!folder) return new Map();
@@ -130,7 +134,8 @@ export class HitsoundPlayer {
     }
     const playableContinuous: PlayableContinuous[] = [];
     for (const event of continuous) {
-      const sounds = await toSounds(event.samples);
+      // Drop empty/placeholder loop samples here so a muted skin can never reach the looping render.
+      const sounds = (await toSounds(event.samples)).filter((s) => s.buffer.duration >= MIN_LOOP_SECONDS);
       if (sounds.length > 0) playableContinuous.push({ startMs: event.startMs, endMs: event.endMs, sounds });
     }
     if (token !== this.loadToken) return;
@@ -149,65 +154,81 @@ export class HitsoundPlayer {
    * Reuses the already-decoded sample buffers and the live music/effects levels.
    */
   async renderMixdown(songPath: string, durationMs: number, startMs = 0): Promise<AudioBuffer | null> {
-    let songBuffer: AudioBuffer | null = null;
     try {
-      const data = await readFile(songPath);
-      const copy = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-      songBuffer = await this.audioContext.decodeAudioData(copy);
-    } catch {
-      songBuffer = null;
-    }
-
-    const startSec = Math.max(0, startMs / 1000);
-    const sampleRate = this.audioContext.sampleRate;
-    const length = Math.max(1, Math.ceil(((durationMs - startMs) / 1000) * sampleRate));
-    const offline = new OfflineAudioContext(2, length, sampleRate);
-
-    const musicLevel = this.audioEngine.musicGain.gain.value;
-    const sampleLevel = this.audioEngine.samplesGain.gain.value;
-
-    if (songBuffer) {
-      const source = offline.createBufferSource();
-      source.buffer = songBuffer;
-      const gain = offline.createGain();
-      gain.gain.value = musicLevel;
-      source.connect(gain).connect(offline.destination);
-      source.start(0, startSec);
-    }
-
-    for (const event of this.events) {
-      const at = event.time / 1000 - startSec;
-      if (at < 0) continue;
-      for (const sound of event.sounds) {
-        const source = offline.createBufferSource();
-        source.buffer = sound.buffer;
-        const gain = offline.createGain();
-        gain.gain.value = sampleLevel * sound.volume;
-        source.connect(gain).connect(offline.destination);
-        source.start(at);
+      let songBuffer: AudioBuffer | null = null;
+      try {
+        const data = await readFile(songPath);
+        const copy = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        songBuffer = await this.audioContext.decodeAudioData(copy);
+      } catch {
+        songBuffer = null;
       }
-    }
 
-    // Looping slider slides / spinner spins, trimmed to the object's span (and the render window).
-    const endSec = durationMs / 1000;
-    for (const event of this.continuous) {
-      const from = Math.max(event.startMs / 1000, startSec);
-      const to = Math.min(event.endMs / 1000, endSec);
-      const span = to - from;
-      if (span <= 0) continue;
-      for (const sound of event.sounds) {
-        const source = offline.createBufferSource();
-        source.buffer = sound.buffer;
-        source.loop = true;
-        const gain = offline.createGain();
-        gain.gain.value = sampleLevel * sound.volume;
-        source.connect(gain).connect(offline.destination);
-        source.start(from - startSec);
-        source.stop(from - startSec + span);
+      // Mix by summing PCM directly into two channel arrays. This is deterministic and fast and
+      // cannot hang — unlike OfflineAudioContext, which gets pathologically slow with thousands of
+      // source nodes. decodeAudioData already resamples every buffer to the context rate, so no
+      // resampling is needed here.
+      const sampleRate = this.audioContext.sampleRate;
+      const startSample = Math.max(0, Math.round((startMs / 1000) * sampleRate));
+      const length = Math.max(1, Math.ceil(((durationMs - startMs) / 1000) * sampleRate));
+      const left = new Float32Array(length);
+      const right = new Float32Array(length);
+
+      const musicLevel = this.audioEngine.musicGain.gain.value;
+      const sampleLevel = this.audioEngine.samplesGain.gain.value;
+
+      // Add a one-shot buffer at destStart (output samples), reading from srcStart, scaled by gain.
+      const addOneShot = (buf: AudioBuffer, destStart: number, gain: number, srcStart = 0) => {
+        if (gain === 0 || buf.length <= srcStart) return;
+        const ch0 = buf.getChannelData(0);
+        const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0;
+        const begin = Math.max(0, -destStart); // skip samples that land before the window start
+        const count = buf.length - srcStart;
+        for (let i = begin; i < count; i++) {
+          const d = destStart + i;
+          if (d >= length) break;
+          left[d] += ch0[srcStart + i] * gain;
+          right[d] += ch1[srcStart + i] * gain;
+        }
+      };
+
+      if (songBuffer) addOneShot(songBuffer, 0, musicLevel, startSample);
+
+      for (const event of this.events) {
+        const destStart = Math.round((event.time / 1000) * sampleRate) - startSample;
+        for (const sound of event.sounds) addOneShot(sound.buffer, destStart, sampleLevel * sound.volume);
       }
-    }
 
-    return offline.startRendering();
+      // Looping slider slides / spinner spins: fill [from, to) by cycling the buffer. Empty/placeholder
+      // samples are already dropped in load(); the guard here is a cheap extra safety.
+      for (const event of this.continuous) {
+        const from = Math.max(0, Math.round((event.startMs / 1000) * sampleRate) - startSample);
+        const to = Math.min(length, Math.round((event.endMs / 1000) * sampleRate) - startSample);
+        if (to <= from) continue;
+        for (const sound of event.sounds) {
+          const buf = sound.buffer;
+          if (!buf || buf.length === 0 || buf.duration < MIN_LOOP_SECONDS) continue;
+          const ch0 = buf.getChannelData(0);
+          const ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0;
+          const gain = sampleLevel * sound.volume;
+          const blen = buf.length;
+          for (let d = from; d < to; d++) {
+            const s = (d - from) % blen;
+            left[d] += ch0[s] * gain;
+            right[d] += ch1[s] * gain;
+          }
+        }
+      }
+
+      const out = this.audioContext.createBuffer(2, length, sampleRate);
+      out.copyToChannel(left, 0);
+      out.copyToChannel(right, 1);
+      return out;
+    } catch (e) {
+      // Never let a hitsound problem abort the export: fall back to the plain song track.
+      console.error("[hitsounds] renderMixdown failed; exporting with the raw song", e);
+      return null;
+    }
   }
 
   async setUseBeatmapHitsounds(useBeatmapHitsounds: boolean) {

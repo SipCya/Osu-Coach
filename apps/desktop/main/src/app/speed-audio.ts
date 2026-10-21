@@ -407,7 +407,17 @@ function detachFramePort(): void {
 }
 
 export function videoExportStart(req: VideoStreamStartRequest): void {
-  if (exportProc) throw new Error("A video export is already running");
+  // A previous export may have left ffmpeg running (e.g. the renderer was interrupted before it
+  // finished/cancelled). Reclaim it instead of refusing to start a new one.
+  if (exportProc) {
+    try {
+      exportProc.kill();
+    } catch {
+      /* already gone */
+    }
+    exportProc = null;
+    detachFramePort();
+  }
 
   const vf: string[] = [];
   if (req.tmixFrames && req.tmixFrames > 1) {
@@ -447,6 +457,13 @@ export function videoExportStart(req: VideoStreamStartRequest): void {
   proc.stderr.on("data", (d) => (exportStderr += d.toString()));
   proc.stdin.on("error", () => undefined); // EPIPE if ffmpeg dies early; surfaced on finish
   proc.on("close", () => (exportProc = proc === exportProc ? null : exportProc));
+}
+
+/** Fallback path: write a single frame straight to ffmpeg's stdin via normal IPC. */
+export async function videoExportFrame(frame: Buffer): Promise<void> {
+  const proc = exportProc;
+  if (!proc || !proc.stdin.writable) throw exportError(proc?.exitCode ?? null);
+  if (!proc.stdin.write(frame)) await once(proc.stdin, "drain");
 }
 
 export async function videoExportFinish(): Promise<void> {
@@ -491,6 +508,7 @@ export function setupSpeedAudioListeners() {
     const port = event.ports[0];
     if (port) attachFramePort(port);
   });
+  ipcMain.handle("videoExportFrame", (event, frame: Buffer) => videoExportFrame(frame));
   ipcMain.handle("videoExportFinish", () => videoExportFinish());
   ipcMain.handle("videoExportCancel", () => videoExportCancel());
 }

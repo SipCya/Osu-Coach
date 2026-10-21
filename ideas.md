@@ -73,7 +73,9 @@ TODO:
 
 ## 🧪 Hard / future
 
-- **PP calculator** — would require building tosu into the project; otherwise redundant since tosu itself already has many overlays.
+- **PP calculator** — would require building tosu into the project; otherwise redundant since tosu itself already has many overlays.ù
+
+--TRANSLATE EVERYTHING TO ENGLISH. COMMENTS INCLUDED
 
 ## Dev
 

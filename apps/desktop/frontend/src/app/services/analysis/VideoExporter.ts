@@ -25,7 +25,6 @@ import { ModSettingsService } from "./mod-settings";
 
 const START_LEAD_IN_MS = 2000;
 const OUTRO_TAIL_MS = 1500; // kept after the last object when trimming the outro
-const FRAME_WINDOW = 8; // max frames in flight over the MessagePort before awaiting an ack
 
 /** Thrown to unwind the render loop when the user cancels; handled as a non-error. */
 class ExportCancelled extends Error {}
@@ -118,11 +117,6 @@ export class VideoExporter {
   private cancelled = false;
   private pauseGate: Promise<void> | null = null;
   private pauseRelease: (() => void) | null = null;
-  // MessagePort frame transport: a credit window bounds how many frames are in flight.
-  private framePort: MessagePort | null = null;
-  private credits = FRAME_WINDOW;
-  private creditWaiters: (() => void)[] = [];
-  private frameFailed = false;
 
   constructor(
     private readonly gameClock: GameplayClock,
@@ -181,26 +175,6 @@ export class VideoExporter {
     if (this.paused) this.resumeExport(); // let the loop wake up and unwind
   }
 
-  /** Post one RGBA frame over the port, waiting for a credit when the window is full. */
-  private async sendFrame(buffer: ArrayBuffer): Promise<void> {
-    if (this.frameFailed) throw new Error("The video encoder stopped unexpectedly");
-    if (this.credits <= 0) await new Promise<void>((resolve) => this.creditWaiters.push(resolve));
-    if (this.frameFailed) throw new Error("The video encoder stopped unexpectedly");
-    this.credits--;
-    this.framePort?.postMessage(buffer, [buffer]);
-  }
-
-  private closeFramePort() {
-    try {
-      this.framePort?.close();
-    } catch {
-      /* already closed */
-    }
-    this.framePort = null;
-    this.creditWaiters.forEach((w) => w());
-    this.creditWaiters = [];
-  }
-
   private firstObjectMs(): number {
     const beatmap = this.beatmapManager.getBeatmap();
     let min = Infinity;
@@ -232,7 +206,13 @@ export class VideoExporter {
   }
 
   async exportReplay(options: VideoExportOptions) {
-    if (this.exporting) return;
+    if (this.exporting) {
+      // Only a genuinely active render blocks a new one; otherwise recover a stale/wedged lock
+      // (e.g. a prior attempt that never finished) instead of silently doing nothing.
+      const phase = this.exportProgress$.getValue().phase;
+      if (phase === "rendering" || phase === "encoding") return;
+      this.exporting = false;
+    }
     const renderer = this.renderManager.getRenderer();
     if (!renderer) {
       this.exportProgress$.next({ phase: "error", value: 0, message: "No renderer" });
@@ -252,9 +232,6 @@ export class VideoExporter {
     this.exporting = true;
     this.paused = false;
     this.cancelled = false;
-    this.frameFailed = false;
-    this.credits = FRAME_WINDOW;
-    this.creditWaiters = [];
     const height = options.renderHeight;
     const width = Math.round((height * 16) / 9 / 2) * 2;
     const outputFps = options.outputFps;
@@ -327,7 +304,12 @@ export class VideoExporter {
       if (options.includeAudio) {
         const song = this.audioPath();
         if (song) {
-          const mix = await this.hitsoundPlayer.renderMixdown(song, endMs, startMs);
+          // Safety net: if the hitsound mixdown stalls, carry on with the raw song so the export
+          // still completes (video + music, just no baked hitsounds).
+          const mix = await Promise.race([
+            this.hitsoundPlayer.renderMixdown(song, endMs, startMs),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 25000)),
+          ]);
           if (mix) {
             wavTemp = join(tmpdir(), `osucoach-audio-${Date.now()}.wav`);
             await writeFile(wavTemp, Buffer.from(audioBufferToWav(mix)));
@@ -337,24 +319,6 @@ export class VideoExporter {
           }
         }
       }
-
-      // Dedicated MessagePort for frame bytes: the renderer transfers each frame's buffer to
-      // main without a per-frame IPC round-trip; main posts an { ack } back per frame for flow control.
-      const channel = new MessageChannel();
-      this.framePort = channel.port1;
-      this.framePort.onmessage = (e: MessageEvent) => {
-        const d = e.data as { ack?: number; fail?: number };
-        if (d?.fail) {
-          this.frameFailed = true;
-          this.creditWaiters.forEach((w) => w());
-          this.creditWaiters = [];
-        } else if (d?.ack) {
-          this.credits++;
-          this.creditWaiters.shift()?.();
-        }
-      };
-      this.framePort.start();
-      ipcRenderer.postMessage("videoExportSetupPort", null, [channel.port2]);
 
       const encoder: string = await ipcRenderer.invoke("detectVideoEncoder");
       await ipcRenderer.invoke("videoExportStart", {
@@ -392,9 +356,8 @@ export class VideoExporter {
         const canvas = extract.canvas(rt);
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Could not read the rendered frame");
-        // getImageData allocates a fresh buffer each call, so transferring it to main is safe.
         const data = ctx.getImageData(0, 0, width, height).data;
-        await this.sendFrame(data.buffer);
+        await ipcRenderer.invoke("videoExportFrame", Buffer.from(data.buffer, data.byteOffset, data.byteLength));
         if (i % 4 === 0) {
           const elapsedMs = performance.now() - renderStart - pausedMs;
           const fps = elapsedMs > 0 ? (i + 1) / (elapsedMs / 1000) : 0;
@@ -402,9 +365,6 @@ export class VideoExporter {
         }
       }
 
-      // Wait for ffmpeg to consume every queued frame before finishing.
-      while (this.credits < FRAME_WINDOW && !this.frameFailed) await new Promise((r) => setTimeout(r, 5));
-      if (this.frameFailed) throw new Error("The video encoder stopped unexpectedly");
       blackBackdrop.destroy();
       this.exportProgress$.next({ phase: "encoding", value: 1, encoder });
       await ipcRenderer.invoke("videoExportFinish");
@@ -425,7 +385,6 @@ export class VideoExporter {
         this.exportProgress$.next({ phase: "error", value: 0, message });
       }
     } finally {
-      this.closeFramePort();
       this.paused = false;
       this.cancelled = false;
       rt?.destroy(true);
