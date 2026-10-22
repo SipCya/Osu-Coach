@@ -3,8 +3,6 @@ export const en = {
   "common.close": "Close",
   "common.help": "Help",
   "common.enabled": "Enabled",
-  "language.label": "Language",
-  "language.toggleTooltip": "Language: English (click for Italian)",
 
   "sidebar.overview": "Overview",
   "sidebar.analyzer": "Analyzer",

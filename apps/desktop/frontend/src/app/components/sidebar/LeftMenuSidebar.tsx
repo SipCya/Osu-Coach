@@ -29,22 +29,6 @@ const repoName = "Osu-Coach";
 const latestReleaseUrl = `https://github.com/${repoOwner}/${repoName}/releases/latest`;
 const latestReleaseApi = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
 
-function LanguageToggle() {
-  const { t, language, setLanguage } = useTranslation();
-  return (
-    <Tooltip title={t("language.toggleTooltip")} placement={"right"}>
-      <Button
-        size={"small"}
-        variant={"outlined"}
-        onClick={() => setLanguage(language === "it" ? "en" : "it")}
-        sx={{ minWidth: 0, px: 1, fontWeight: 800, color: "text.primary", borderColor: "divider" }}
-      >
-        {language.toUpperCase()}
-      </Button>
-    </Tooltip>
-  );
-}
-
 function useCheckForUpdate() {
   const { appVersion } = useAppInfo();
   const { newVersion } = useAppSelector((state) => state.updater);
@@ -129,7 +113,6 @@ export function LeftMenuSidebar() {
         </Tooltip>
       )}
       <Box flexGrow={1} />
-      <LanguageToggle />
     </Stack>
   );
 }

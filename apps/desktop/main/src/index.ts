@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from "electron";
-import { MenuLanguage, menuTexts } from "./menu-i18n";
+import { menuTexts } from "./menu-i18n";
 import { setupEventListeners } from "./app/events";
 import { setupSpeedAudioListeners } from "./app/speed-audio";
 import { setupTosuListeners } from "./app/tosu";
@@ -53,11 +53,6 @@ function createFrontendWindow() {
     menuState.osuFolder = folder;
     Menu.setApplicationMenu(createMenu(menuState.osuFolder));
   });
-  ipcMain.on("languageChanged", (event, language: MenuLanguage) => {
-    menuState.language = language === "it" ? "it" : "en";
-    Menu.setApplicationMenu(createMenu(menuState.osuFolder));
-  });
-
   void frontend.loadURL(frontendUrl());
 
   windows.frontend = frontend;
@@ -113,11 +108,11 @@ function handleActivate() {
   app.on("activate", handleActivate);
 })();
 
-const menuState: { language: MenuLanguage; osuFolder: string | null } = { language: "en", osuFolder: null };
+const menuState: { osuFolder: string | null } = { osuFolder: null };
 
 function createMenu(osuFolder: string | null) {
   const osuFolderKnown = !!osuFolder as boolean;
-  const tx = menuTexts(menuState.language);
+  const tx = menuTexts;
   const isMac = process.platform === "darwin";
 
   const template: (Electron.MenuItemConstructorOptions | Electron.MenuItem)[] = [];

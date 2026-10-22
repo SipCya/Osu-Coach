@@ -1,4 +1,4 @@
-import { Language, LANGUAGES, TranslationKey, useTranslation } from "../../i18n";
+import { TranslationKey, useTranslation } from "../../i18n";
 import { useSettingsModalContext } from "../../providers/SettingsProvider";
 import {
   Autocomplete,
@@ -16,8 +16,6 @@ import {
   Stack,
   Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { Brush, SportsEsports, Tune } from "@mui/icons-material";
@@ -322,7 +320,7 @@ function SkinsSettings() {
 }
 
 function OtherSettings() {
-  const { t, language, setLanguage } = useTranslation();
+  const { t } = useTranslation();
   const [confirmReset, setConfirmReset] = useState(false);
   const resetSettings = useCallback(() => {
     localStorage.clear();
@@ -331,22 +329,6 @@ function OtherSettings() {
 
   return (
     <Stack gap={3}>
-      <Section title={t("language.label")}>
-        <Row label={t("language.label")}>
-          <ToggleButtonGroup
-            exclusive
-            size={"small"}
-            value={language}
-            onChange={(_, value: Language | null) => value && setLanguage(value)}
-          >
-            {LANGUAGES.map((l) => (
-              <ToggleButton key={l.id} value={l.id} sx={{ textTransform: "none", px: 2 }}>
-                {l.name}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-        </Row>
-      </Section>
       <Section title={t("settings.sectionReset")}>
         <Row label={t("settings.reset")} description={t("settings.resetHint")}>
           <Button variant={"outlined"} color={"error"} onClick={() => setConfirmReset(true)}>

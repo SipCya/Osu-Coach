@@ -715,7 +715,7 @@ const RESTORE_TARGET_LABELS: Record<"collection" | "scores", TranslationKey> = {
 };
 
 function BackupsSection({ osuFolder, osuRunning }: { osuFolder: string; osuRunning: boolean }) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const guard = useOsuGuard(osuRunning);
   const [toRestore, setToRestore] = useState<BackupFile | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<{ severity: "success" | "error"; text: string } | null>(null);
@@ -785,7 +785,7 @@ function BackupsSection({ osuFolder, osuRunning }: { osuFolder: string; osuRunni
     await load();
   };
 
-  const dateFormat = new Intl.DateTimeFormat(language === "it" ? "it-IT" : "en-GB", {
+  const dateFormat = new Intl.DateTimeFormat("en-GB", {
     dateStyle: "short",
     timeStyle: "medium",
   });

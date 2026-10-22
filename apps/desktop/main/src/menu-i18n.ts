@@ -1,6 +1,4 @@
-export type MenuLanguage = "en" | "it";
-
-const en = {
+export const menuTexts = {
   file: "File",
   openReplay: "Open Replay",
   replayFilter: "osu! Replay",
@@ -26,34 +24,4 @@ const en = {
   quit: "Quit",
 };
 
-const it: typeof en = {
-  file: "File",
-  openReplay: "Apri replay",
-  replayFilter: "Replay di osu!",
-  allFiles: "Tutti i file",
-  openInstallFolder: "Apri la cartella di installazione",
-  openConfigFolder: "Apri la cartella delle impostazioni",
-  openLogsFolder: "Apri la cartella dei log",
-  openOsuFolder: "Apri la cartella di osu!",
-  close: "Chiudi la finestra",
-  view: "Visualizza",
-  reload: "Ricarica",
-  forceReload: "Ricarica forzata",
-  devTools: "Strumenti per sviluppatori",
-  help: "Aiuto",
-  documentation: "osu!coach su GitHub",
-  about: "Informazioni",
-  aboutTitle: "Informazioni su osu!coach",
-  aboutMessage: "osu!coach {version}",
-  services: "Servizi",
-  hide: "Nascondi",
-  hideOthers: "Nascondi gli altri",
-  unhide: "Mostra tutto",
-  quit: "Esci",
-};
-
-export type MenuTexts = typeof en;
-
-export function menuTexts(language: MenuLanguage): MenuTexts {
-  return language === "it" ? it : en;
-}
+export type MenuTexts = typeof menuTexts;
