@@ -9,6 +9,7 @@ export interface SongEntry {
   creator: string;
   folderName: string;
   audioFileName: string;
+  osuFileName: string;
   /** Absolute path to the audio file on disk. */
   audioPath: string;
   lastPlayed: Date;
@@ -31,6 +32,7 @@ export function buildSongLibrary(blueprints: BlueprintInfo[], songsFolder: strin
       creator: b.creator,
       folderName: b.folderName,
       audioFileName: b.audioFileName,
+      osuFileName: b.osuFileName,
       audioPath: join(songsFolder, b.folderName, b.audioFileName),
       lastPlayed: b.lastPlayed,
     };

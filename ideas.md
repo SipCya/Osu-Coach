@@ -43,7 +43,7 @@ TODO:
 
 ## 🎵 Song Mashup
 
-- ✅ Done (mp3 mashup), incl. loudness-match option, per-segment preview at the chosen speed, and **per-segment volume (gain) trim**. Possible further polish: beat-synced crossfades.
+- ✅ Done (mp3 mashup), incl. loudness-match option, per-segment preview at the chosen speed, per-segment volume (gain) trim, and **beat-synced crossfade presets** (½/1/2/4 beats, from the song's BPM read off the beatmap).
 
 ## 🔍 Cheat check
 
@@ -52,7 +52,7 @@ TODO:
 - **Reliable:** improve the timewarp metric (% of impossibly-fast frames, detect a constant-frametime cluster); replay-steal with time alignment (cross-correlation) + a calibrated threshold.
 - **Heuristic (with disclaimers):** relax (auto-tap), autopilot (auto-aim), aim correction / assist.
 - **Frame anomalies:** perfectly straight aim segments (impossible cursor speed already shown as a stat).
-- Report polish: cursor snaps as a **timeline** (angle vs time), a cursor-speed-over-time chart. Also: **PDF export** of the report? Tune the flag thresholds on real replays.
+- ✅ Report polish: cursor snaps as a **timeline** (angle vs time) and a **cursor-speed-over-time** line chart (with the impossible-speed threshold + spikes marked). Still open: **PDF export** of the report? Tune the flag thresholds on real replays.
 - Big / optional: **osu! API** (OAuth) for leaderboard comparison / reference replays.
 
 ## 🧠 Coaching system

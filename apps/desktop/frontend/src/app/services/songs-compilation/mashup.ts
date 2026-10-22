@@ -24,12 +24,35 @@ export interface MashupPlan {
   loudnorm?: boolean;
 }
 
+/** Read the base BPM from a raw `.osu` (its first uninherited timing point). */
+export function parseBpm(osu: string): number | null {
+  let inTiming = false;
+  for (const raw of osu.split(/\r?\n/)) {
+    const line = raw.trim();
+    const header = /^\[(.+)\]$/.exec(line);
+    if (header) {
+      inTiming = header[1] === "TimingPoints";
+      continue;
+    }
+    if (!inTiming || !line) continue;
+    const p = line.split(",");
+    const beatLength = parseFloat(p[1]);
+    const uninherited = p.length > 6 ? p[6] : "1"; // red (uninherited) line = real BPM
+    if (Number.isFinite(beatLength) && beatLength > 0 && uninherited !== "0") {
+      return Math.round((60000 / beatLength) * 100) / 100;
+    }
+  }
+  return null;
+}
+
 /** UI-facing segment: a chosen slice of one library song plus its effects and the join after it. */
 export interface CompSegment {
   id: string;
   song: SongEntry;
   /** Full length of the source audio, once known (ms). 0 until decoded. */
   durationMs: number;
+  /** Base BPM read from the beatmap, once known (for beat-synced crossfades). */
+  bpm?: number;
   startMs: number;
   endMs: number;
   rate: number;

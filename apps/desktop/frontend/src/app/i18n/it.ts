@@ -723,6 +723,7 @@ export const it: Record<TranslationKey, string> = {
   "comp.crossfade": "Dissolvenza",
   "comp.rate": "Velocità",
   "comp.gain": "Volume",
+  "comp.beatCrossfade": "Crossfade sul beat · {bpm} BPM",
   "comp.fadeIn": "Fade in",
   "comp.fadeOut": "Fade out",
   "comp.moveUp": "Sposta su",

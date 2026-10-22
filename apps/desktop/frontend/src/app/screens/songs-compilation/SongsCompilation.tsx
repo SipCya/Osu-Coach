@@ -32,6 +32,7 @@ import {
 import { useObservable } from "rxjs-hooks";
 import { ipcRenderer, shell } from "electron";
 import { existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { dirname, join } from "path";
 import { useTranslation } from "../../i18n";
 import { frontendAPI } from "../../api";
@@ -42,6 +43,7 @@ import {
   estimateDurationMs,
   makeSegment,
   MashupJoin,
+  parseBpm,
   toPlanAndInputs,
 } from "../../services/songs-compilation/mashup";
 import { WaveformSelector } from "../../components/songs-compilation/WaveformSelector";
@@ -56,6 +58,12 @@ import {
 
 const ACCENT = "#ff66aa";
 const GAP_PRESETS = [0, 500, 1000, 2000];
+const BEAT_PRESETS: { beats: number; label: string }[] = [
+  { beats: 0.5, label: "½" },
+  { beats: 1, label: "1" },
+  { beats: 2, label: "2" },
+  { beats: 4, label: "4" },
+];
 
 let counter = 0;
 const nextId = () => `comp-${++counter}`;
@@ -83,10 +91,12 @@ function Card({ children, title }: { children: React.ReactNode; title?: string }
 function JoinControl({
   join,
   maxCrossfadeMs,
+  bpm,
   onChange,
 }: {
   join: MashupJoin;
   maxCrossfadeMs: number;
+  bpm?: number;
   onChange: (j: MashupJoin) => void;
 }) {
   const { t } = useTranslation();
@@ -119,19 +129,41 @@ function JoinControl({
           ))}
         </Stack>
       ) : (
-        <Box sx={{ flex: 1, maxWidth: 260, px: 1 }}>
-          <Slider
-            size={"small"}
-            min={200}
-            max={Math.max(400, Math.min(6000, maxCrossfadeMs))}
-            step={100}
-            value={join.ms}
-            valueLabelFormat={(v) => `${(v / 1000).toFixed(1)}s`}
-            valueLabelDisplay={"auto"}
-            onChange={(_, v) => onChange({ type: "crossfade", ms: v as number })}
-            sx={{ color: ACCENT }}
-          />
-        </Box>
+        <Stack direction={"row"} alignItems={"center"} spacing={1} sx={{ flex: 1, flexWrap: "wrap" }}>
+          {bpm && bpm > 0 && (
+            <Tooltip title={t("comp.beatCrossfade", { bpm: Math.round(bpm) })}>
+              <Stack direction={"row"} spacing={0.5}>
+                {BEAT_PRESETS.map(({ beats, label }) => {
+                  const ms = Math.round(beats * (60000 / bpm));
+                  const active = Math.abs(join.ms - ms) <= 12;
+                  return (
+                    <Chip
+                      key={beats}
+                      size={"small"}
+                      label={label}
+                      color={active ? "primary" : "default"}
+                      onClick={() => onChange({ type: "crossfade", ms })}
+                      sx={active ? { bgcolor: ACCENT } : undefined}
+                    />
+                  );
+                })}
+              </Stack>
+            </Tooltip>
+          )}
+          <Box sx={{ flex: 1, minWidth: 140, maxWidth: 260, px: 1 }}>
+            <Slider
+              size={"small"}
+              min={200}
+              max={Math.max(400, Math.min(6000, maxCrossfadeMs))}
+              step={100}
+              value={join.ms}
+              valueLabelFormat={(v) => `${(v / 1000).toFixed(1)}s`}
+              valueLabelDisplay={"auto"}
+              onChange={(_, v) => onChange({ type: "crossfade", ms: v as number })}
+              sx={{ color: ACCENT }}
+            />
+          </Box>
+        </Stack>
       )}
     </Stack>
   );
@@ -310,7 +342,17 @@ export function SongsCompilation() {
       setJob({ state: "error", message: t("comp.audioMissing", { file: song.audioFileName }) });
       return;
     }
-    setSegments((s) => [...s, makeSegment(nextId(), song, 0)]);
+    const id = nextId();
+    setSegments((s) => [...s, makeSegment(id, song, 0)]);
+    // Read the base BPM in the background so the join control can offer beat-synced crossfades.
+    void (async () => {
+      try {
+        const bpm = parseBpm(await readFile(join(dirname(song.audioPath), song.osuFileName), "utf-8"));
+        if (bpm) patchSegment(id, { bpm });
+      } catch {
+        /* no BPM — the crossfade just stays in seconds */
+      }
+    })();
   };
   const patchSegment = (id: string, patch: Partial<CompSegment>) =>
     setSegments((s) => s.map((seg) => (seg.id === id ? { ...seg, ...patch } : seg)));
@@ -455,6 +497,7 @@ export function SongsCompilation() {
                     <JoinControl
                       join={seg.joinAfter}
                       maxCrossfadeMs={Math.min(seg.endMs - seg.startMs, segments[i + 1].endMs - segments[i + 1].startMs)}
+                      bpm={seg.bpm}
                       onChange={(j) => setJoin(seg.id, j)}
                     />
                   )}

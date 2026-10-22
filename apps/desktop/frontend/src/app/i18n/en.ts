@@ -719,6 +719,7 @@ export const en = {
   "comp.crossfade": "Crossfade",
   "comp.rate": "Speed",
   "comp.gain": "Volume",
+  "comp.beatCrossfade": "Beat-synced crossfade · {bpm} BPM",
   "comp.fadeIn": "Fade in",
   "comp.fadeOut": "Fade out",
   "comp.moveUp": "Move up",
