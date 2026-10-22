@@ -13,7 +13,7 @@ import { GameplayClock } from "../common/game/GameplayClock";
 import { GameLoop } from "../common/game/GameLoop";
 import { PixiRendererManager } from "../renderers/PixiRendererManager";
 import { dirname, join } from "path";
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { BlueprintLocatorService } from "../common/local/BlueprintLocatorService";
 import { OsuFolderService } from "../common/local/OsuFolderService";
 import { BeatmapBackgroundSettingsStore } from "../common/beatmap-background";
@@ -23,6 +23,8 @@ import { ModSettingsService } from "../analysis/mod-settings";
 import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
 import { buildContinuousEvents, buildHitsoundEvents } from "../hitsounds/hitsound-events";
 import { recordCoachingEntry } from "../coach/coaching-history";
+import { StoryboardSound } from "../hitsounds/HitsoundPlayer";
+import { parseStoryboardSamples } from "../hitsounds/storyboard";
 import { parseHitsoundData } from "../hitsounds/hitsound-data";
 import { SkinSettingsStore } from "../common/skin";
 import { HitsoundSettingsStore } from "../common/hitsound";
@@ -80,6 +82,31 @@ export class ScenarioManager {
     } catch {
       return null;
     }
+  }
+
+  /** Storyboard `Sample` events from the `.osu` plus any `.osb`, resolved to absolute file paths. */
+  private async collectStoryboardSamples(rawOsu: string, folder: string): Promise<StoryboardSound[]> {
+    const texts = [rawOsu];
+    try {
+      for (const name of await readdir(folder)) {
+        if (name.toLowerCase().endsWith(".osb")) {
+          try {
+            texts.push(await readFile(join(folder, name), "utf-8"));
+          } catch {
+            /* unreadable .osb — skip it */
+          }
+        }
+      }
+    } catch {
+      /* folder not listable — just use the .osu */
+    }
+    const samples: StoryboardSound[] = [];
+    for (const text of texts) {
+      for (const s of parseStoryboardSamples(text)) {
+        samples.push({ time: s.time, file: join(folder, s.file.replace(/\\/g, "/")), volume: s.volume });
+      }
+    }
+    return samples;
   }
 
   public initialize() {
@@ -153,8 +180,9 @@ export class ScenarioManager {
       const hitsoundData = parseHitsoundData(rawBlueprint);
       const events = buildHitsoundEvents(beatmap.hitObjects, finalState, hitsoundData);
       const continuous = buildContinuousEvents(beatmap.hitObjects, finalState, hitsoundData);
+      const storyboard = await this.collectStoryboardSamples(rawBlueprint, absoluteFolderPath);
       this.hitsoundPlayer
-        .load(events, continuous, {
+        .load(events, continuous, storyboard, {
           beatmap: absoluteFolderPath,
           skin: this.currentSkinFolder(),
           fallback: join(this.builtInSkinsFolder, "OsuDefaultSkin"),

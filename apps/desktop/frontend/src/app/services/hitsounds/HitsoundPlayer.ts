@@ -32,6 +32,13 @@ interface PlayableContinuous {
   sounds: PlayableSound[];
 }
 
+/** A storyboard sample: an absolute file path played once at `time` (export mixdown only). */
+export interface StoryboardSound {
+  time: number;
+  file: string; // absolute path (already resolved against the beatmap folder)
+  volume: number; // 0..1
+}
+
 const EXTENSIONS = [".wav", ".ogg", ".mp3"];
 const LOOKAHEAD_MS = 120;
 const TICK_MS = 20;
@@ -65,8 +72,9 @@ function findFile(index: Map<string, string>, base: string | null): string | nul
 @injectable()
 export class HitsoundPlayer {
   private events: PlayableEvent[] = [];
-  // Looping slider/spinner sounds, only consumed by renderMixdown (not scheduled live).
+  // Looping slider/spinner sounds and storyboard one-shots, only consumed by renderMixdown.
   private continuous: PlayableContinuous[] = [];
+  private storyboard: PlayableEvent[] = [];
   private pointer = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private scheduled = new Set<AudioBufferSourceNode>();
@@ -74,6 +82,7 @@ export class HitsoundPlayer {
   private loadToken = 0;
   private lastEvents: HitsoundEvent[] = [];
   private lastContinuous: ContinuousEvent[] = [];
+  private lastStoryboard: StoryboardSound[] = [];
   private lastFolders: HitsoundFolders | null = null;
 
   constructor(
@@ -100,10 +109,16 @@ export class HitsoundPlayer {
     return promise;
   }
 
-  async load(events: HitsoundEvent[], continuous: ContinuousEvent[], folders: HitsoundFolders) {
+  async load(
+    events: HitsoundEvent[],
+    continuous: ContinuousEvent[],
+    storyboard: StoryboardSound[],
+    folders: HitsoundFolders,
+  ) {
     const token = ++this.loadToken;
     this.lastEvents = events;
     this.lastContinuous = continuous;
+    this.lastStoryboard = storyboard;
     this.lastFolders = folders;
     const [beatmap, skin, fallback] = await Promise.all([
       listFolder(folders.beatmap),
@@ -138,15 +153,22 @@ export class HitsoundPlayer {
       const sounds = (await toSounds(event.samples)).filter((s) => s.buffer.duration >= MIN_LOOP_SECONDS);
       if (sounds.length > 0) playableContinuous.push({ startMs: event.startMs, endMs: event.endMs, sounds });
     }
+    // Storyboard samples resolve to a concrete file (no skin banks), so decode each path directly.
+    const playableStoryboard: PlayableEvent[] = [];
+    for (const s of storyboard) {
+      const buffer = await this.decode(s.file);
+      if (buffer) playableStoryboard.push({ time: s.time, sounds: [{ buffer, volume: s.volume }] });
+    }
     if (token !== this.loadToken) return;
     this.events = playable;
     this.continuous = playableContinuous;
+    this.storyboard = playableStoryboard;
     this.resync();
   }
 
   async changeSkinFolder(skin: string | null) {
     if (!this.lastFolders || this.lastFolders.skin === skin) return;
-    await this.load(this.lastEvents, this.lastContinuous, { ...this.lastFolders, skin });
+    await this.load(this.lastEvents, this.lastContinuous, this.lastStoryboard, { ...this.lastFolders, skin });
   }
 
   /**
@@ -194,7 +216,8 @@ export class HitsoundPlayer {
 
       if (songBuffer) addOneShot(songBuffer, 0, musicLevel, startSample);
 
-      for (const event of this.events) {
+      const oneShots = [...this.events, ...this.storyboard];
+      for (const event of oneShots) {
         const destStart = Math.round((event.time / 1000) * sampleRate) - startSample;
         for (const sound of event.sounds) addOneShot(sound.buffer, destStart, sampleLevel * sound.volume);
       }
@@ -233,7 +256,10 @@ export class HitsoundPlayer {
 
   async setUseBeatmapHitsounds(useBeatmapHitsounds: boolean) {
     if (!this.lastFolders || this.lastFolders.useBeatmapHitsounds === useBeatmapHitsounds) return;
-    await this.load(this.lastEvents, this.lastContinuous, { ...this.lastFolders, useBeatmapHitsounds });
+    await this.load(this.lastEvents, this.lastContinuous, this.lastStoryboard, {
+      ...this.lastFolders,
+      useBeatmapHitsounds,
+    });
   }
 
   clear() {
@@ -241,8 +267,10 @@ export class HitsoundPlayer {
     this.stopSources();
     this.events = [];
     this.continuous = [];
+    this.storyboard = [];
     this.lastEvents = [];
     this.lastContinuous = [];
+    this.lastStoryboard = [];
     this.lastFolders = null;
     this.pointer = 0;
   }

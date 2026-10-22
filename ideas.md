@@ -34,7 +34,7 @@ TODO:
 
 - ✅ **Pause & resume (same session)**: the render loop can be paused/resumed and cancelled from the export dialog (ffmpeg stays alive while paused). **Resume after closing the app is still TODO** — the raw-pipe produces a single streamed mp4, so it needs a **segmented rewrite**: render in chunks (each a complete mp4), persist a small state file (options, replay, done chunks), continue the missing chunks on relaunch, then concat + mux audio.
 - **MessagePort** frame transport — attempted, then **reverted** (it regressed the export and couldn't be verified reliably); frames go back over per-frame IPC. Revisit later with a safer implementation if the speed is needed. (Dormant port code still sits in `speed-audio.ts`.)
-- Storyboard samples (one-shot audio samples triggered by the storyboard).
+- ✅ **Storyboard samples**: `Sample` events from the `.osu` (and any `.osb`) are decoded and mixed into the exported video's audio as one-shots, on top of the song + hitsounds (export only).
 - ✅ Export now plays at the replay speed (DT/HT, video + audio); ✅ "Trim outro" option; ✅ continuous slider/spinner sounds in the mixdown.
 
 ## 🗺️ Map Practice
@@ -54,11 +54,6 @@ TODO:
 - **Frame anomalies:** perfectly straight aim segments (impossible cursor speed already shown as a stat).
 - Report polish: cursor snaps as a **timeline** (angle vs time), a cursor-speed-over-time chart. Also: **PDF export** of the report? Tune the flag thresholds on real replays.
 - Big / optional: **osu! API** (OAuth) for leaderboard comparison / reference replays.
-
-## 🎯 Aim trainer
-
-- Train on the player's **real mistakes**: the Reviewer already knows where you fail (overshoot/undershoot on jumps, angles, distances, rhythms). Generate exercises with the same jump distances, angles and BPM from your replays, repeated until consistent, then re-checked on new replays to see if the mistakes went down.
-- **Maybe instead**, build this inside the Reviewer via the Map Practice feature: let the user create maps from the sections where they make the most mistakes — and keep the aim trainer itself as it is.
 
 ## 🧠 Coaching system
 

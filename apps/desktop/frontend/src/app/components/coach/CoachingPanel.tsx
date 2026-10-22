@@ -209,12 +209,12 @@ export function CoachingPanel() {
         )}
       </Stack>
 
-      <Stack direction={"row"} gap={1}>
+      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
         <StatTile label={t("coach.plays")} value={String(stats.plays)} />
         <StatTile label={t("coach.avgAcc")} value={`${(stats.avgAcc * 100).toFixed(2)}%`} />
         <StatTile label={t("coach.avgUr")} value={stats.avgUr.toFixed(0)} />
         <StatTile label={t("coach.typicalOffset")} value={offsetSigned} />
-      </Stack>
+      </Box>
 
       {weakness && (
         <Box sx={{ bgcolor: "rgba(255,255,255,0.04)", borderRadius: 2, p: 1.25, borderLeft: `3px solid ${weakness.color}` }}>
