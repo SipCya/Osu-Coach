@@ -22,6 +22,7 @@ import { ReplayFileWatcher } from "../common/local/ReplayFileWatcher";
 import { ModSettingsService } from "../analysis/mod-settings";
 import { HitsoundPlayer } from "../hitsounds/HitsoundPlayer";
 import { buildContinuousEvents, buildHitsoundEvents } from "../hitsounds/hitsound-events";
+import { recordCoachingEntry } from "../coach/coaching-history";
 import { parseHitsoundData } from "../hitsounds/hitsound-data";
 import { SkinSettingsStore } from "../common/skin";
 import { HitsoundSettingsStore } from "../common/hitsound";
@@ -161,6 +162,32 @@ export class ScenarioManager {
         })
         .catch((e) => console.error("Could not load hitsounds", e));
     }
+
+    // Record this analysis into the cross-session coaching history (for the Progress panel).
+    const coach = this.gameSimulator.coach$.getValue();
+    if (coach) {
+      const { great, ok, meh } = coach.timing.counts;
+      const miss = coach.mistakes.filter((m) => m.kind === "Miss").length;
+      const total = great + ok + meh + miss;
+      const aim = coach.mistakes.filter((m) => m.category === "Aim").length;
+      const tapping = coach.mistakes.filter((m) => m.category === "Tapping").length;
+      recordCoachingEntry({
+        replayHash: replay.md5hash,
+        beatmapMd5: replay.beatmapMd5,
+        date: Date.now(),
+        title: metadata.title,
+        artist: metadata.artist,
+        player: replay.player,
+        mods: replay.mods,
+        accuracy: total > 0 ? (300 * great + 100 * ok + 50 * meh) / (300 * total) : 0,
+        ur: coach.timing.ur,
+        meanErrorMs: coach.timing.meanErrorMs,
+        suggestedOffsetMs: coach.timing.suggestedOffsetMs,
+        counts: { great, ok, meh, miss },
+        misses: { aim, tapping, other: coach.mistakes.length - aim - tapping },
+      });
+    }
+
     await this.sceneManager.changeToScene(AnalysisSceneKeys.ANALYSIS);
 
     this.gameLoop.startTicker();

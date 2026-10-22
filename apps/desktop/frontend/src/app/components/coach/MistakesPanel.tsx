@@ -6,9 +6,10 @@ import { CATEGORY_COLORS, CoachAnalysis, HitTiming, Mistake } from "../../servic
 import { ignoreFocus } from "../../utils/focus";
 import { MistakeAnalysisDialog } from "./MistakeAnalysisDialog";
 import { UrAnalyzerPanel, JUDGEMENT_COLOR } from "./UrAnalyzerPanel";
+import { CoachingPanel } from "./CoachingPanel";
 import { useTranslation } from "../../i18n";
 
-type TopTab = "mistakes" | "ur";
+type TopTab = "mistakes" | "ur" | "progress";
 type Category = "all" | "aim" | "tapping" | "other";
 
 export function formatTime(ms: number) {
@@ -207,6 +208,9 @@ export function MistakesPanel() {
         <ToggleButton value={"ur"} onFocus={ignoreFocus} sx={{ textTransform: "none", fontWeight: 700 }}>
           {t("coach.urAnalyzer")}
         </ToggleButton>
+        <ToggleButton value={"progress"} onFocus={ignoreFocus} sx={{ textTransform: "none", fontWeight: 700 }}>
+          {t("coach.progress")}
+        </ToggleButton>
       </ToggleButtonGroup>
 
       {tab === "mistakes" && (
@@ -272,6 +276,8 @@ export function MistakesPanel() {
           )}
         </Box>
       )}
+
+      {tab === "progress" && <CoachingPanel />}
 
       {selected && coach && (
         <MistakeAnalysisDialog

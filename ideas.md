@@ -33,7 +33,7 @@ TODO:
 ## 🎬 Video export
 
 - ✅ **Pause & resume (same session)**: the render loop can be paused/resumed and cancelled from the export dialog (ffmpeg stays alive while paused). **Resume after closing the app is still TODO** — the raw-pipe produces a single streamed mp4, so it needs a **segmented rewrite**: render in chunks (each a complete mp4), persist a small state file (options, replay, done chunks), continue the missing chunks on relaunch, then concat + mux audio.
-- ✅ **MessagePort** frame transport: frames are transferred to main over a dedicated port with a credit window (no per-frame IPC round-trip).
+- **MessagePort** frame transport — attempted, then **reverted** (it regressed the export and couldn't be verified reliably); frames go back over per-frame IPC. Revisit later with a safer implementation if the speed is needed. (Dormant port code still sits in `speed-audio.ts`.)
 - Storyboard samples (one-shot audio samples triggered by the storyboard).
 - ✅ Export now plays at the replay speed (DT/HT, video + audio); ✅ "Trim outro" option; ✅ continuous slider/spinner sounds in the mixdown.
 
@@ -62,7 +62,7 @@ TODO:
 
 ## 🧠 Coaching system
 
-- After a few analyzed replays: suggestions on what to improve and the player's main aim/tapping issues (later, maybe with map suggestions). Requires tracking the replay-analysis results over time.
+- ✅ **Progress panel** (3rd tab in the coach panel): every analysed replay is recorded to a cross-session history (localStorage); shows plays / avg accuracy / avg UR / typical offset, the main weakness (aim vs tapping), a UR trend sparkline and data-driven suggestions, plus a recent-plays list. Possible later: map suggestions, per-skill breakdown over time.
 
 ## 🖥️ UI / bugs
 
@@ -73,9 +73,9 @@ TODO:
 
 ## 🧪 Hard / future
 
-- **PP calculator** — would require building tosu into the project; otherwise redundant since tosu itself already has many overlays.ù
+- **PP calculator** — would require building tosu into the project; otherwise redundant since tosu itself already has many overlays.
 
---TRANSLATE EVERYTHING TO ENGLISH. COMMENTS INCLUDED
+~~TRANSLATE EVERYTHING TO ENGLISH. COMMENTS INCLUDED~~ — ✅ done (the codebase was already English; only some hardcoded error strings in `speed-audio.ts` were Italian). The `it.ts` / `menu-i18n.ts` locales stay Italian on purpose.
 
 ## Dev
 

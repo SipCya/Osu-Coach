@@ -57,7 +57,7 @@ function tempoChain(rate: number): string {
 }
 
 export async function createSpeedAudio({ input, output, rate, changePitch }: SpeedAudioRequest) {
-  if (!existsSync(input)) throw new Error(`File audio non trovato: ${input}`);
+  if (!existsSync(input)) throw new Error(`Audio file not found: ${input}`);
   if (existsSync(output)) return { output, reused: true };
 
   let filter = tempoChain(rate);
@@ -99,10 +99,10 @@ export interface TrimAudioRequest {
 }
 
 export async function createTrimmedAudio({ input, output, startMs, endMs }: TrimAudioRequest) {
-  if (!existsSync(input)) throw new Error(`File audio non trovato: ${input}`);
+  if (!existsSync(input)) throw new Error(`Audio file not found: ${input}`);
   const start = Math.max(0, startMs) / 1000;
   const duration = Math.max(0, endMs - startMs) / 1000;
-  if (duration <= 0) throw new Error("Intervallo audio non valido");
+  if (duration <= 0) throw new Error("Invalid audio range");
 
   const temp = `${output}.part.mp3`;
   try {
@@ -152,9 +152,9 @@ export async function createMashup(
   { inputs, plan, output }: CompileMashupRequest,
   onProgress?: (p: MashupProgress) => void,
 ) {
-  if (inputs.length === 0 || plan.segments.length === 0) throw new Error("Nessun segmento da unire");
+  if (inputs.length === 0 || plan.segments.length === 0) throw new Error("No segments to merge");
   for (const f of inputs) {
-    if (!existsSync(f)) throw new Error(`File audio non trovato: ${f}`);
+    if (!existsSync(f)) throw new Error(`Audio file not found: ${f}`);
   }
   const { filterComplex, outLabel, totalMs } = buildMashupFilter(plan);
   const temp = `${output}.part.mp3`;
@@ -205,7 +205,7 @@ export interface ConvertToMp4Request {
 }
 
 export async function convertToMp4({ input, output, height, crf }: ConvertToMp4Request) {
-  if (!existsSync(input)) throw new Error(`File video non trovato: ${input}`);
+  if (!existsSync(input)) throw new Error(`Video file not found: ${input}`);
   // libx264 needs even dimensions and yuv420p; always normalise both in the filter chain.
   const scale = height && height > 0 ? `scale=-2:${height}` : "scale=trunc(iw/2)*2:trunc(ih/2)*2";
   const args = [
