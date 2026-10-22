@@ -209,6 +209,23 @@ function SegmentCard({
         </Box>
         <Box sx={{ flex: 1 }}>
           <Typography variant={"caption"} color={"text.secondary"}>
+            {t("comp.gain")}: {Math.round(seg.gain * 100)}%
+          </Typography>
+          <Slider
+            size={"small"}
+            min={0}
+            max={2}
+            step={0.05}
+            value={seg.gain}
+            marks={[{ value: 1, label: "100%" }]}
+            valueLabelFormat={(v) => `${Math.round((v as number) * 100)}%`}
+            valueLabelDisplay={"auto"}
+            onChange={(_, v) => onChange({ gain: v as number })}
+            sx={{ color: ACCENT }}
+          />
+        </Box>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant={"caption"} color={"text.secondary"}>
             {t("comp.fadeIn")}: {(seg.fadeInMs / 1000).toFixed(1)}s
           </Typography>
           <Slider

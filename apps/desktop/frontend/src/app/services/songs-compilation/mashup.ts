@@ -10,6 +10,7 @@ export interface MashupSegment {
   startMs: number;
   endMs: number;
   rate?: number;
+  gain?: number;
   fadeInMs?: number;
   fadeOutMs?: number;
 }
@@ -32,6 +33,7 @@ export interface CompSegment {
   startMs: number;
   endMs: number;
   rate: number;
+  gain: number;
   fadeInMs: number;
   fadeOutMs: number;
   /** How this segment joins the following one (ignored for the last segment). */
@@ -46,6 +48,7 @@ export function makeSegment(id: string, song: SongEntry, durationMs: number): Co
     startMs: 0,
     endMs: durationMs,
     rate: 1,
+    gain: 1,
     fadeInMs: 0,
     fadeOutMs: 0,
     joinAfter: { type: "gap", ms: 0 },
@@ -87,6 +90,7 @@ export function toPlanAndInputs(segs: CompSegment[], loudnorm = false): { inputs
     startMs: s.startMs,
     endMs: s.endMs,
     rate: s.rate,
+    gain: s.gain,
     fadeInMs: s.fadeInMs,
     fadeOutMs: s.fadeOutMs,
   }));

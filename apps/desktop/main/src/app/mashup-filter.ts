@@ -16,6 +16,8 @@ export interface MashupSegment {
   endMs: number;
   /** Playback rate (1 = unchanged). Values outside [0.5, 2] are chained automatically. */
   rate?: number;
+  /** Linear volume multiplier for this segment in the final mix (1 = unchanged). */
+  gain?: number;
   fadeInMs?: number;
   fadeOutMs?: number;
 }
@@ -95,6 +97,7 @@ export function buildMashupFilter(plan: MashupPlan): BuiltMashup {
     segSec.push(pSec);
     const chain: string[] = [`atrim=start=${s3(seg.startMs)}:end=${s3(seg.endMs)}`, "asetpts=N/SR/TB"];
     if (Math.abs(rate - 1) > 1e-6) chain.push(tempoChain(rate));
+    if (seg.gain != null && seg.gain >= 0 && Math.abs(seg.gain - 1) > 1e-6) chain.push(`volume=${seg.gain.toFixed(3)}`);
     if (seg.fadeInMs && seg.fadeInMs > 0) chain.push(`afade=t=in:st=0:d=${s3(seg.fadeInMs)}`);
     if (seg.fadeOutMs && seg.fadeOutMs > 0) {
       const st = Math.max(0, pSec - seg.fadeOutMs / 1000);

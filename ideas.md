@@ -43,7 +43,7 @@ TODO:
 
 ## 🎵 Song Mashup
 
-- ✅ Done (mp3 mashup), incl. loudness-match option + per-segment preview at the chosen speed. Possible further polish: per-segment gain trim, beat-synced crossfades.
+- ✅ Done (mp3 mashup), incl. loudness-match option, per-segment preview at the chosen speed, and **per-segment volume (gain) trim**. Possible further polish: beat-synced crossfades.
 
 ## 🔍 Cheat check
 

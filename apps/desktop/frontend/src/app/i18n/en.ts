@@ -718,6 +718,7 @@ export const en = {
   "comp.noGap": "None",
   "comp.crossfade": "Crossfade",
   "comp.rate": "Speed",
+  "comp.gain": "Volume",
   "comp.fadeIn": "Fade in",
   "comp.fadeOut": "Fade out",
   "comp.moveUp": "Move up",
