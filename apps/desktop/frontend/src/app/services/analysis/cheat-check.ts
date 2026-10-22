@@ -97,6 +97,32 @@ export function maxCursorSpeed(frames: ReplayFrame[]): number {
   return max;
 }
 
+export interface SpeedPoint {
+  t: number; // ms
+  speed: number; // px/ms (peak within the bucket)
+}
+
+/**
+ * Downsamples the per-frame cursor speed into `buckets` time slots, keeping the PEAK speed in
+ * each — so a single impossibly-fast frame still shows up as a spike in the over-time chart.
+ */
+export function cursorSpeedSeries(frames: ReplayFrame[], buckets = 260): SpeedPoint[] {
+  if (frames.length < 2) return [];
+  const t0 = frames[0].time;
+  const span = Math.max(1, frames[frames.length - 1].time - t0);
+  const peak = new Float64Array(buckets);
+  for (let i = 1; i < frames.length; i++) {
+    const dt = frames[i].time - frames[i - 1].time;
+    if (dt <= 0) continue;
+    const d = Math.hypot(frames[i].position.x - frames[i - 1].position.x, frames[i].position.y - frames[i - 1].position.y);
+    const b = Math.min(buckets - 1, Math.max(0, Math.floor(((frames[i].time - t0) / span) * buckets)));
+    peak[b] = Math.max(peak[b], d / dt);
+  }
+  const out: SpeedPoint[] = [];
+  for (let b = 0; b < buckets; b++) out.push({ t: t0 + ((b + 0.5) / buckets) * span, speed: peak[b] });
+  return out;
+}
+
 /**
  * Number of consecutive-frame segments whose cursor speed exceeds `maxPxPerMs`.
  * A fast human flick, coarsely sampled, spikes a handful of times; an aimbot teleports

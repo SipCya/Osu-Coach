@@ -30,6 +30,7 @@ import {
   cheatVerdict,
   compareReplays,
   computeCheatFlags,
+  cursorSpeedSeries,
   fastCursorSegments,
   keyHoldDurationsByKey,
   maxCursorSpeed,
@@ -112,6 +113,8 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
       frametime: reports.frametime,
       snaps: reports.snaps.snaps,
       maxCursorSpeed: reports.maxSpeed,
+      cursorSpeed: reports.cursorSpeed,
+      durationMs: reports.durationMs,
       flags: reports.flags,
     });
     const file = join(tmpdir(), `osucoach-cheat-report-${Date.now()}.html`);
@@ -130,6 +133,8 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
     const holdDurations = [...left, ...right];
     const maxSpeed = maxCursorSpeed(replay.frames);
     const fastSegments = fastCursorSegments(replay.frames);
+    const cursorSpeed = cursorSpeedSeries(replay.frames);
+    const durationMs = replay.frames.length > 0 ? replay.frames[replay.frames.length - 1].time : 0;
     const flags = computeCheatFlags({
       frametime,
       offsets,
@@ -140,7 +145,7 @@ function CheatDialog({ onClose }: { onClose: () => void }) {
       maxCursorSpeed: maxSpeed,
       fastCursorSegments: fastSegments,
     });
-    return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, leftHolds: left, rightHolds: right, maxSpeed, flags };
+    return { ur: unstableRate(offsets), frametime, snaps, offsets, holdDurations, leftHolds: left, rightHolds: right, maxSpeed, cursorSpeed, durationMs, flags };
   }, [replay, analyzer]);
 
   const compare = async () => {

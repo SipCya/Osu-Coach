@@ -1,4 +1,4 @@
-import { Bin, cheatVerdict, Flag, FrametimeReport, histogram, Snap } from "./cheat-check";
+import { Bin, cheatVerdict, DEFAULT_SNAP_OPTIONS, Flag, FrametimeReport, histogram, Snap, SpeedPoint } from "./cheat-check";
 
 export interface CheatReportData {
   player: string;
@@ -12,8 +12,12 @@ export interface CheatReportData {
   frametime: FrametimeReport;
   snaps: Snap[];
   maxCursorSpeed: number;
+  cursorSpeed: SpeedPoint[];
+  durationMs: number;
   flags: Flag[];
 }
+
+const FAST_THRESHOLD = 50; // px/ms — the "humanly impossible" cursor speed used by the flags
 
 const ACCENT = "#ff66aa";
 const SUSPECT = "#ff5c5c";
@@ -29,6 +33,12 @@ function timestamp(ms: number): string {
   const s = Math.floor((t % 60000) / 1000);
   const cs = Math.floor((t % 1000) / 10);
   return `${m}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+}
+
+/** Short m:ss for axis ticks. */
+function clock(ms: number): string {
+  const t = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
 function fmtNum(n: number): string {
@@ -192,6 +202,119 @@ function section(title: string, chart: string, explanation: string): string {
   return `<section><h2>${esc(title)}</h2>${chart}<p class="explain">${explanation}</p></section>`;
 }
 
+/** Cursor speed (px/ms) over time, with the impossible-speed threshold and spikes marked. */
+function speedLineChart(points: SpeedPoint[], threshold: number): string {
+  if (points.length < 2) return `<p class="muted">No data.</p>`;
+  const W = 680;
+  const H = 240;
+  const padLeft = 42;
+  const padRight = 14;
+  const padTop = 20;
+  const padBottom = 34;
+  const plotW = W - padLeft - padRight;
+  const plotH = H - padTop - padBottom;
+  const t0 = points[0].t;
+  const tspan = Math.max(1, points[points.length - 1].t - t0);
+  const yMax = Math.max(threshold * 1.25, Math.max(...points.map((p) => p.speed)) * 1.08, 1);
+  const x = (t: number) => padLeft + ((t - t0) / tspan) * plotW;
+  const y = (s: number) => H - padBottom - (Math.min(s, yMax) / yMax) * plotH;
+
+  const yStep = niceStep(yMax, 4);
+  const yGrid: string[] = [];
+  for (let v = 0; v <= yMax + 1e-9; v += yStep) {
+    const yy = y(v);
+    yGrid.push(
+      `<line x1="${padLeft}" y1="${yy.toFixed(1)}" x2="${W - padRight}" y2="${yy.toFixed(1)}" class="gridline" />` +
+        `<text x="${padLeft - 6}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" class="axis">${fmtNum(v)}</text>`,
+    );
+  }
+  const xLabels: string[] = [];
+  for (let k = 0; k <= 6; k++) {
+    const t = t0 + (k / 6) * tspan;
+    xLabels.push(`<text x="${x(t).toFixed(1)}" y="${H - padBottom + 15}" text-anchor="middle" class="axis">${clock(t)}</text>`);
+  }
+  const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(p.t).toFixed(1)} ${y(p.speed).toFixed(1)}`).join(" ");
+  const area =
+    `M${x(t0).toFixed(1)} ${(H - padBottom).toFixed(1)} ` +
+    points.map((p) => `L${x(p.t).toFixed(1)} ${y(p.speed).toFixed(1)}`).join(" ") +
+    ` L${x(points[points.length - 1].t).toFixed(1)} ${(H - padBottom).toFixed(1)} Z`;
+  const ty = y(threshold);
+  const thresh =
+    `<line x1="${padLeft}" y1="${ty.toFixed(1)}" x2="${W - padRight}" y2="${ty.toFixed(1)}" class="meanline" style="stroke:${SUSPECT}" />` +
+    `<text x="${W - padRight}" y="${(ty - 4).toFixed(1)}" text-anchor="end" class="axis" style="fill:${SUSPECT}">${threshold} px/ms</text>`;
+  const spikes = points
+    .filter((p) => p.speed > threshold)
+    .map((p) => `<circle cx="${x(p.t).toFixed(1)}" cy="${y(p.speed).toFixed(1)}" r="2.6" fill="${SUSPECT}" />`)
+    .join("");
+  const bw = plotW / points.length;
+  const hover = points
+    .map(
+      (p, i) =>
+        `<rect class="bar" data-tip="${esc(`${clock(p.t)} · ${p.speed.toFixed(2)} px/ms`)}" x="${(padLeft + i * bw).toFixed(
+          1,
+        )}" y="${padTop}" width="${Math.max(1, bw).toFixed(1)}" height="${plotH}" fill="transparent"></rect>`,
+    )
+    .join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="xMidYMid meet">
+    ${yGrid.join("")}
+    <path d="${area}" fill="${ACCENT}" fill-opacity="0.12" />
+    <path d="${line}" fill="none" stroke="${ACCENT}" stroke-width="1.4" />
+    ${thresh}${spikes}
+    <line x1="${padLeft}" y1="${H - padBottom}" x2="${W - padRight}" y2="${H - padBottom}" class="axisline" />
+    ${xLabels.join("")}${hover}
+    <text x="${W - padRight}" y="${H - 4}" text-anchor="end" class="axis">px/ms</text>
+  </svg>`;
+}
+
+/** Cursor snaps over time: each dot is a sharp reversal; higher/redder = sharper flick. */
+function snapTimeline(snaps: Snap[], durationMs: number, maxAngle: number): string {
+  if (snaps.length === 0) return `<p class="muted">No suspicious cursor snaps found.</p>`;
+  const W = 680;
+  const H = 180;
+  const padLeft = 42;
+  const padRight = 14;
+  const padTop = 16;
+  const padBottom = 34;
+  const plotW = W - padLeft - padRight;
+  const plotH = H - padTop - padBottom;
+  const t1 = Math.max(durationMs, ...snaps.map((s) => s.time), 1);
+  const x = (t: number) => padLeft + (t / t1) * plotW;
+  // Sharper (smaller angle) sits nearer the top — the more alarming end.
+  const y = (a: number) => padTop + (Math.min(a, maxAngle) / maxAngle) * plotH;
+
+  const yStep = Math.max(1, Math.round(maxAngle / 4));
+  const yGrid: string[] = [];
+  for (let a = 0; a <= maxAngle + 1e-9; a += yStep) {
+    const yy = y(a);
+    yGrid.push(
+      `<line x1="${padLeft}" y1="${yy.toFixed(1)}" x2="${W - padRight}" y2="${yy.toFixed(1)}" class="gridline" />` +
+        `<text x="${padLeft - 6}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" class="axis">${a}°</text>`,
+    );
+  }
+  const xLabels: string[] = [];
+  for (let k = 0; k <= 6; k++) {
+    const t = (k / 6) * t1;
+    xLabels.push(`<text x="${x(t).toFixed(1)}" y="${H - padBottom + 15}" text-anchor="middle" class="axis">${clock(t)}</text>`);
+  }
+  const dots = snaps
+    .map((s) => {
+      const color = s.angleDeg < maxAngle * 0.4 ? SUSPECT : ACCENT;
+      const tip = `${timestamp(s.time)} · ${s.angleDeg.toFixed(0)}° turn · ${Math.round(s.distance)}px`;
+      return `<circle class="bar" data-tip="${esc(tip)}" cx="${x(s.time).toFixed(1)}" cy="${y(s.angleDeg).toFixed(
+        1,
+      )}" r="3.2" fill="${color}" fill-opacity="0.85"></circle>`;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="xMidYMid meet">
+    ${yGrid.join("")}
+    <line x1="${padLeft}" y1="${H - padBottom}" x2="${W - padRight}" y2="${H - padBottom}" class="axisline" />
+    ${xLabels.join("")}${dots}
+    <text x="${padLeft}" y="${padTop - 4}" class="axis">sharper ↑</text>
+  </svg>`;
+}
+
 export function buildCheatReportHtml(data: CheatReportData): string {
   // Hit error histogram, symmetric around 0.
   const absMax = Math.max(50, ...data.offsets.map((o) => Math.abs(o)));
@@ -335,9 +458,19 @@ export function buildCheatReportHtml(data: CheatReportData): string {
     } measured). Humans vary; a spike of near-identical durations can hint at an auto-clicker or bot. Toggle <b>Separate keys</b> to compare left vs right — a cheat often locks one finger to a near-fixed value (a vertical line of one colour).</p>
   </section>
 
-  <section><h2>Cursor snaps</h2>${snapRows}<p class="explain">Sharp cursor reversals (near-180° flicks over a large distance). A few can be legit flicks; many clustered ones can hint at aim assist. Max cursor speed: ${data.maxCursorSpeed.toFixed(
-    2,
-  )} px/ms.</p></section>
+  ${section(
+    "Cursor speed over time",
+    speedLineChart(data.cursorSpeed, FAST_THRESHOLD),
+    `Peak cursor speed in each slice of the replay. The dashed line marks ${FAST_THRESHOLD} px/ms — a speed no human reaches. An occasional spike can be a fast flick caught by coarse sampling, but many points riding above the line (red) suggest teleport-style aim. Peak: ${data.maxCursorSpeed.toFixed(
+      2,
+    )} px/ms.`,
+  )}
+
+  <section><h2>Cursor snaps</h2>
+    ${snapTimeline(data.snaps, data.durationMs, DEFAULT_SNAP_OPTIONS.maxAngleDeg)}
+    ${snapRows}
+    <p class="explain">Sharp cursor reversals (near-180° flicks over a large distance). Each dot above is one snap over time — higher and redder means a sharper turn. A few scattered ones can be legit flicks; a dense cluster can hint at aim assist.</p>
+  </section>
 
   <footer>Generated by osu!coach · ${new Date().toLocaleString()}</footer>
 </div>
