@@ -350,60 +350,9 @@ export interface VideoStreamStartRequest {
 let exportProc: ChildProcessWithoutNullStreams | null = null;
 let exportStderr = "";
 
-// Frames arrive over a MessagePort (not per-frame IPC) and are written to ffmpeg's stdin
-// one at a time; an { ack } is posted back per frame so the renderer can window its sends.
-let framePort: Electron.MessagePortMain | null = null;
-let frameQueue: Buffer[] = [];
-let draining = false;
-
 function exportError(code: number | null): Error {
   const tail = exportStderr.trim().split("\n").filter(Boolean).slice(-6).join(" | ");
   return new Error(tail || `ffmpeg exited with code ${code}`);
-}
-
-async function drainFrames(): Promise<void> {
-  if (draining) return;
-  draining = true;
-  try {
-    while (frameQueue.length > 0) {
-      const proc = exportProc;
-      if (!proc || !proc.stdin.writable) {
-        // ffmpeg is gone: drop the backlog and let the renderer stop waiting for acks.
-        frameQueue = [];
-        framePort?.postMessage({ fail: 1 });
-        break;
-      }
-      const frame = frameQueue.shift() as Buffer;
-      if (!proc.stdin.write(frame)) await once(proc.stdin, "drain");
-      framePort?.postMessage({ ack: 1 });
-    }
-  } finally {
-    draining = false;
-  }
-}
-
-function attachFramePort(port: Electron.MessagePortMain): void {
-  detachFramePort();
-  framePort = port;
-  frameQueue = [];
-  port.on("message", (e) => {
-    const data = e.data as ArrayBuffer | null;
-    if (data) {
-      frameQueue.push(Buffer.from(data));
-      void drainFrames();
-    }
-  });
-  port.start();
-}
-
-function detachFramePort(): void {
-  try {
-    framePort?.close();
-  } catch {
-    /* already closed */
-  }
-  framePort = null;
-  frameQueue = [];
 }
 
 export function videoExportStart(req: VideoStreamStartRequest): void {
@@ -416,7 +365,6 @@ export function videoExportStart(req: VideoStreamStartRequest): void {
       /* already gone */
     }
     exportProc = null;
-    detachFramePort();
   }
 
   const vf: string[] = [];
@@ -467,14 +415,11 @@ export async function videoExportFrame(frame: Buffer): Promise<void> {
 }
 
 export async function videoExportFinish(): Promise<void> {
-  // Flush any frames still queued from the port before closing ffmpeg's stdin.
-  while (frameQueue.length > 0 || draining) await new Promise((r) => setTimeout(r, 5));
   const proc = exportProc;
   if (!proc) throw new Error("No video export running");
   await new Promise<void>((resolve, reject) => {
     proc.on("close", (code) => {
       exportProc = null;
-      detachFramePort();
       if (code === 0) resolve();
       else reject(exportError(code));
     });
@@ -483,7 +428,6 @@ export async function videoExportFinish(): Promise<void> {
 }
 
 export function videoExportCancel(): void {
-  detachFramePort();
   if (exportProc) {
     try {
       exportProc.kill();
@@ -504,10 +448,6 @@ export function setupSpeedAudioListeners() {
   ipcMain.handle("detectVideoEncoder", () => detectH264Encoder());
   ipcMain.handle("assembleVideo", (event, request: AssembleVideoRequest) => assembleVideo(request));
   ipcMain.handle("videoExportStart", (event, request: VideoStreamStartRequest) => videoExportStart(request));
-  ipcMain.on("videoExportSetupPort", (event) => {
-    const port = event.ports[0];
-    if (port) attachFramePort(port);
-  });
   ipcMain.handle("videoExportFrame", (event, frame: Buffer) => videoExportFrame(frame));
   ipcMain.handle("videoExportFinish", () => videoExportFinish());
   ipcMain.handle("videoExportCancel", () => videoExportCancel());

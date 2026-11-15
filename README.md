@@ -1,12 +1,14 @@
 # osu!coach
 
-Desktop tools for [osu!](https://osu.ppy.sh/) stable on Windows, in English and Italian.
+Desktop tools for [osu!](https://osu.ppy.sh/) stable on Windows.
 
 ## Features
 
 | Tab | What it does |
 |---|---|
-| **Replay Reviewer** | Watch your replays and see every mistake explained: early or late clicks, aim, notelock, slider breaks. |
+| **Replay Reviewer** | Watch your replays and see every mistake explained (early/late clicks, aim, notelock, slider breaks). Includes a **UR analyzer** (unstable rate, suggested offset, hit-error and UR-over-time charts), a **Progress** panel that tracks your plays over time and highlights your main weaknesses, a **Cheat check** with an interactive report, and **MP4 export** of any replay (DT/HT speed, motion blur, overlays, song + hitsounds). |
+| **Map Practice** | Build a practice map from the sections you want, even merging sections across different difficulties of the same song. Editor-style preview with music and volume, optional audio trim to the practiced part. |
+| **Song Mashup** | Stitch parts of songs from your osu! library into a single MP3: pick parts on a waveform, per-segment speed / volume / fades, and joins as a gap or a beat-synced crossfade. |
 | **Speed Changer** | Create faster or slower versions of a map, by multiplier or exact BPM, with optional pitch change and custom AR/CS/OD/HP. Save settings as profiles and reuse them on any map. |
 | **Collections** | Manage the collections you see in game: create, rename, delete, add and remove maps, search and filter your maps. |
 | **Cleaner** | Free disk space (videos, storyboards, skin elements, hitsounds, backgrounds, difficulties of a mode, leftover files), replace missing backgrounds, manage local replays and local scores, move the Songs folder to another drive, restore osu!coach backups. |
@@ -33,6 +35,12 @@ Start tosu before or together with osu!. osu!coach finds it by itself on the def
 - Skin changes keep the original files in a `.osucoach-originals` folder inside the skin. In osu!, reload the skin with `Ctrl+Alt+Shift+S` to see the changes.
 - The Flashlight overlay needs osu! in borderless or windowed mode: nothing can be drawn over exclusive fullscreen. The FL cursor works in any mode.
 
+The Replay Reviewer's cheat check is a set of **heuristic hints, not proof** — always review a replay yourself before drawing any conclusion.
+
+## AI disclosure
+
+osu!coach was built with heavy use of AI assistance (Anthropic's Claude) for writing and reviewing code. All features were directed, tested and are maintained by the author.
+
 ## Development
 
 ```
@@ -46,7 +54,7 @@ Start the second command when the first one says it compiled. In PowerShell, use
 ## Build
 
 ```
-yarn run build
+yarn run desktop:build:prod
 ```
 
-The installer is created in `dist/electron`.
+Builds the renderer and main process for production and packages a Windows installer in `dist/electron`.

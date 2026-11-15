@@ -2,12 +2,10 @@
 
 > Only open items are kept here. Completed work lives in the git history.
 
-- No "claude code" tracks in the repo / pushes; add the AI disclosure to the README eventually.
-
 ## 🎬 Video export
 
 - **Resume after closing the app** — the raw-pipe produces a single streamed mp4, so it needs a **segmented rewrite**: render in chunks (each a complete mp4), persist a small state file (options, replay, done chunks), continue the missing chunks on relaunch, then concat + mux audio.
-- **MessagePort frame transport** — tried and reverted (it regressed the export and couldn't be verified reliably). Revisit with a safer implementation if the speed is needed. (Dormant port code still sits in `speed-audio.ts`.)
+- **MessagePort frame transport** — tried and reverted (it regressed the export and couldn't be verified reliably); frames go over per-frame IPC. Revisit with a safer implementation if the speed is ever needed.
 
 ## 🔍 Cheat check
 
