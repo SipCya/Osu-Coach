@@ -57,3 +57,7 @@ yarn run desktop:build:prod
 ```
 
 Builds the renderer and main process for production and packages a Windows installer in `dist/electron`.
+
+## Credits
+
+osu!coach is a fork of [Rewind](https://github.com/abstrakt8/rewind) by abstrakt, which provides the replay reviewer and renderer it builds on; the Speed Changer takes inspiration from [osu-trainer](https://github.com/FunOrange/osu-trainer) by FunOrange. Everything else — Map Practice, Song Mashup, the UR analyzer, the Progress panel, the cheat check, MP4 export and more — was added here. Released under the MIT License (see [LICENSE.md](LICENSE.md)), keeping the original copyright.
