@@ -1,5 +1,7 @@
 # osu!coach
 
+Inspired by Rewind and Osu-trainer by funorange
+
 Desktop tools for [osu!](https://osu.ppy.sh/) stable on Windows.
 
 ## Features
@@ -37,9 +39,6 @@ Start tosu before or together with osu!. osu!coach finds it by itself on the def
 
 The Replay Reviewer's cheat check is a set of **heuristic hints, not proof** — always review a replay yourself before drawing any conclusion.
 
-## AI disclosure
-
-osu!coach was built with heavy use of AI assistance (Anthropic's Claude) for writing and reviewing code. All features were directed, tested and are maintained by the author.
 
 ## Development
 
