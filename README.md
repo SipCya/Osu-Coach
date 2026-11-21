@@ -4,6 +4,8 @@ Inspired by Rewind and Osu-trainer by funorange
 
 Desktop tools for [osu!](https://osu.ppy.sh/) stable on Windows.
 
+![Replay Reviewer](docs/screenshots/replay-reviewer.png)
+
 ## Features
 
 | Tab | What it does |
@@ -17,6 +19,20 @@ Desktop tools for [osu!](https://osu.ppy.sh/) stable on Windows.
 | **Aim Trainer** | Circles and sliders with adjustable size, approach rate, jump distance, BPM and keys. Shows where your clicks land compared to the jump direction. |
 | **Skins** | Replace element groups between skins, recolor images, generate a random skin mixing the ones you have. Every change can be restored. |
 | **Flashlight** | Practice the Flashlight mod without using it: an overlay over osu! that darkens everything except around the cursor, or an FL cursor generated for the skin you use. |
+
+## Screenshots
+
+### Speed Changer
+![Speed Changer](docs/screenshots/speed-changer.png)
+
+### Map Practice
+![Map Practice](docs/screenshots/map-practice.png)
+
+### Collections
+![Collections](docs/screenshots/collections.png)
+
+### Song Mashup
+![Song Mashup](docs/screenshots/song-mashup.png)
 
 ## tosu
 
