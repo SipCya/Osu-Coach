@@ -1,6 +1,7 @@
 {
   "name": "osu-coach",
   "version": "0.3.0",
+  "description": "Desktop tools for osu! stable: replay review, coaching, cheat check, MP4 export, speed changer, map practice, song mashup, collections, cleaner, aim trainer, skins and flashlight.",
   "private": true,
   "license": "MIT",
   "author": "SipCya",
